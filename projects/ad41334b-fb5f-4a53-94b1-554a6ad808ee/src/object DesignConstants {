@@ -1,0 +1,11 @@
+const val PRIMARY_BUTTON_BASE_SIZE_DP = 200
+    const val PRIMARY_BUTTON_SIZE_DP = 240
+    const val FLOWER_PETAL_COUNT = 6
+    const val PETAL_RADIUS_DP = 96
+    const val CENTER_RADIUS_DP = 72
+    val PRIMARY_GRADIENT = Brush.linearGradient(listOf(Color(0xFF9C27B0), Color(0xFF673AB7)))
+    const val PRIMARY_BUTTON_ELEVATION_DP = 8
+    val PRIMARY_BUTTON_TEXT_STYLE = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+    const val BLOOM_SCALE = 1.05f
+    const val BLOOM_DURATION_MS = 150
+}

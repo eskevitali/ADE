@@ -1,0 +1,80 @@
+# ADE v4 — backend on web_network for Nginx Proxy Manager (ade.kider.at)
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ade-v4-postgres
+    environment:
+      POSTGRES_USER: ade
+      POSTGRES_PASSWORD: ade
+      POSTGRES_DB: ade
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ade -d ade"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: ade-v4-backend-1
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - .env
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      POSTGRES_URL: postgresql://ade:ade@postgres:5432/ade
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      WORKSPACE_PROXY_NETWORK: ade-v4_default
+    volumes:
+      - ./ade:/app/ade
+      - ./frontend:/app/frontend
+      - ./projects:/app/projects
+      - ./knowledge:/app/knowledge
+      - ./reviews:/app/reviews
+      - ./governance:/app/governance
+      - backend_data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - default
+      - web_network
+    depends_on:
+      qdrant:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+networks:
+  web_network:
+    external: true
+
+volumes:
+  postgres_data:
+    driver: local
+  qdrant_data:
+    driver: local
+  backend_data:
+    driver: local

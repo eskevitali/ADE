@@ -1,0 +1,11 @@
+# ADI workspace — Timer Demo
+services:
+  workspace:
+    image: python:3.12-slim
+    container_name: ade-adi-sim-8cc1aa99-workspace
+    working_dir: /workspace
+    volumes:
+      - /root/ADE-V4/projects/sim-8cc1aa99/src:/workspace/src
+      - /root/ADE-V4/projects/sim-8cc1aa99/data:/workspace/data
+    command: sleep infinity
+    restart: unless-stopped

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ru" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ADE v4{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ade: { bg: '#0b0f19', card: '#111827', accent: '#6366f1', glow: '#818cf8' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background: radial-gradient(ellipse at top, #1e1b4b 0%, #0b0f19 50%); }
+    .glass { background: rgba(17,24,39,0.8); backdrop-filter: blur(12px); border: 1px solid rgba(99,102,241,0.2); }
+  </style>
+  <script src="/static/pipeline-progress.js"></script>
+  {% block head %}{% endblock %}
+</head>
+<body class="h-full text-gray-100 min-h-screen">
+  <nav class="glass border-b border-indigo-500/20 sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="/dashboard" class="text-xl font-bold text-indigo-300 tracking-tight">ADE v4</a>
+      <div class="flex items-center gap-4 text-sm">
+        <a href="/dashboard" class="hover:text-indigo-300 transition">Dashboard</a>
+        <a href="/team" class="hover:text-indigo-300 transition">Команда агентов</a>
+        <a href="/projects/new" class="hover:text-indigo-300 transition">New Project</a>
+        <a href="/docs" class="hover:text-indigo-300 transition">API</a>
+        {% if user %}
+        <span class="text-gray-500 hidden sm:inline">{{ user }}</span>
+        <form method="post" action="/auth/logout" class="inline">
+          <button type="submit" class="text-gray-400 hover:text-red-300 transition">Выйти</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </nav>
+  <main class="max-w-6xl mx-auto px-4 py-8">
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

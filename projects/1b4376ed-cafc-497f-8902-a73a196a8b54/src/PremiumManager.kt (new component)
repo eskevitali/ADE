@@ -1,0 +1,7 @@
+class PremiumManager @Inject constructor(
+    private val settingsRepository: SettingsRepository
+) {
+    suspend fun isPremium(): Boolean = settingsRepository.isPremiumUser()
+    suspend fun canDisableDialog(): Boolean = isPremium()
+    suspend fun canDisableAds(): Boolean = isPremium()
+}

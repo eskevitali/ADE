@@ -1,0 +1,4 @@
+var selectedContact: Contact?
+    var deliveryMethod: DeliveryMethod = .sms
+    var isFirstLaunch: Bool = true
+}

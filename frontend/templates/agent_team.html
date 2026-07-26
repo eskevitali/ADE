@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}Команда агентов — ADE v4{% endblock %}
+{% block content %}
+<div class="mb-8 flex flex-wrap items-start justify-between gap-4">
+  <div>
+    <h1 class="text-3xl font-bold text-white mb-2">Команда агентов</h1>
+    <p class="text-gray-400">Модели и system prompts (markdown). Файлы: <code class="text-gray-500 text-sm">{{ team_config.prompts_dir }}</code></p>
+  </div>
+  <div class="flex flex-wrap gap-2">
+    <button type="button" id="btn-reset-all"
+      class="px-4 py-2 rounded-lg text-sm font-medium bg-amber-900/50 hover:bg-amber-800/60 text-amber-200 border border-amber-500/30 transition">
+      Сбросить всё по умолчанию
+    </button>
+    <a href="/dashboard" class="px-4 py-2 rounded-lg text-sm text-gray-400 hover:text-indigo-300 transition">← Dashboard</a>
+  </div>
+</div>
+
+<div class="glass rounded-xl p-4 mb-6 flex flex-wrap items-center gap-4 text-sm">
+  <span class="text-gray-400">Статус:</span>
+  <span id="team-online" class="text-emerald-300">{{ team_config.online_count }}/{{ team_config.team_count }} Online</span>
+  <span class="text-gray-600">|</span>
+  <span class="text-gray-400">Агентов: <strong id="team-count" class="text-white">{{ team_config.team_count }}</strong></span>
+</div>
+
+<div id="save-status" class="hidden mb-4 px-4 py-2 rounded-lg text-sm"></div>
+
+<div id="agents-container" class="space-y-4">
+  {% for agent in team_config.agents %}
+  <div class="glass rounded-xl p-5 border border-indigo-500/10" data-role="{{ agent.role }}">
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+      <div>
+        <h2 class="text-lg font-semibold text-white">
+          {{ role_labels.get(agent.role, agent.name) }}
+          {% if agent.customized %}<span class="text-xs text-amber-400 ml-2">изменено</span>{% endif %}
+        </h2>
+        <p class="text-xs text-gray-500 mt-1">{{ agent.description }}</p>
+        <p class="text-xs font-mono text-gray-600 mt-1">{{ agent.prompt_path }}</p>
+      </div>
+      <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs border
+        {% if agent.status == 'online' %}bg-emerald-900/40 text-emerald-300 border-emerald-500/30{% else %}bg-red-900/40 text-red-300 border-red-500/30{% endif %}">
+        <span class="w-1.5 h-1.5 rounded-full {% if agent.status == 'online' %}bg-emerald-400 animate-pulse{% else %}bg-red-400{% endif %}"></span>
+        {% if agent.status == 'online' %}Online{% else %}Offline{% endif %}
+      </span>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="lg:col-span-1">
+        <label class="block text-xs text-gray-400 mb-1">Модель LLM</label>
+        <select class="agent-model w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200"
+          data-role="{{ agent.role }}">
+          <option value="{{ agent.model }}" selected>{{ agent.model }}</option>
+          {% for m in team_config.suggested_models %}
+          {% if m != agent.model %}
+          <option value="{{ m }}">{{ m }}</option>
+          {% endif %}
+          {% endfor %}
+        </select>
+        <p class="text-xs text-gray-600 mt-1">По умолчанию: <span class="font-mono">{{ agent.default_model }}</span></p>
+      </div>
+      <div class="lg:col-span-2">
+        <label class="block text-xs text-gray-400 mb-1">System prompt (markdown)</label>
+        <textarea class="agent-prompt w-full h-36 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 font-mono resize-y"
+          data-role="{{ agent.role }}">{{ agent.prompt }}</textarea>
+      </div>
+    </div>
+    <div class="flex flex-wrap gap-2 mt-4">
+      <button type="button" class="btn-save-agent px-4 py-2 rounded-lg text-sm font-medium bg-indigo-700 hover:bg-indigo-600 text-white transition"
+        data-role="{{ agent.role }}">Сохранить</button>
+      <button type="button" class="btn-reset-agent px-4 py-2 rounded-lg text-sm bg-gray-800 hover:bg-gray-700 text-gray-300 transition"
+        data-role="{{ agent.role }}">Вставить default</button>
+      <textarea class="hidden default-prompt-store" data-role="{{ agent.role }}" aria-hidden="true">{{ agent.default_prompt }}</textarea>
+      <input type="hidden" class="default-model-store" data-role="{{ agent.role }}" value="{{ agent.default_model }}">
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<details class="mt-10 glass rounded-xl p-5" open>
+  <summary class="font-semibold cursor-pointer text-indigo-300">Workflow-инструкции (дополнения к ролям)</summary>
+  <p class="text-xs text-gray-500 mt-2 mb-4">HITL, Dev Cycle, Recovery, Deploy. Плейсхолдеры: <code class="text-gray-400">{spec}</code>, <code class="text-gray-400">{code}</code>, <code class="text-gray-400">{idea}</code>, <code class="text-gray-400">{doc_type}</code></p>
+  <div id="workflows-container" class="space-y-4">
+    {% for wf in team_config.workflow_prompts %}
+    <div class="bg-gray-900/40 rounded-lg p-4 border border-gray-800" data-workflow="{{ wf.name }}">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-sm font-mono text-gray-300">
+          {{ wf.name }}.md
+          {% if wf.customized %}<span class="text-amber-400 text-xs ml-2">изменено</span>{% endif %}
+        </h3>
+        <button type="button" class="btn-save-workflow text-xs px-3 py-1 rounded bg-indigo-800/60 hover:bg-indigo-700/60 text-indigo-200"
+          data-name="{{ wf.name }}">Сохранить</button>
+      </div>
+      <textarea class="workflow-prompt w-full h-24 bg-gray-950 border border-gray-800 rounded px-3 py-2 text-xs text-gray-300 font-mono resize-y"
+        data-name="{{ wf.name }}">{{ wf.prompt }}</textarea>
+    </div>
+    {% endfor %}
+  </div>
+</details>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const ROLE_LABELS = {{ role_labels | tojson }};
+
+  function showStatus(msg, ok = true) {
+    const el = document.getElementById("save-status");
+    el.textContent = msg;
+    el.className = `mb-4 px-4 py-2 rounded-lg text-sm ${ok ? "bg-emerald-950/50 text-emerald-200 border border-emerald-500/30" : "bg-red-950/50 text-red-200 border border-red-500/30"}`;
+    el.classList.remove("hidden");
+    setTimeout(() => el.classList.add("hidden"), 4000);
+  }
+
+  document.querySelectorAll(".btn-save-agent").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const role = btn.dataset.role;
+      const model = document.querySelector(`.agent-model[data-role="${role}"]`)?.value;
+      const prompt = document.querySelector(`.agent-prompt[data-role="${role}"]`)?.value;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/team/agents/${role}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ model, prompt }),
+        });
+        const data = await res.json();
+        if (data.status === "ok") {
+          showStatus(`${ROLE_LABELS[role] || role}: сохранено`);
+          setTimeout(() => location.reload(), 800);
+        } else {
+          showStatus(data.message || data.detail || "Ошибка сохранения", false);
+        }
+      } catch (e) {
+        showStatus(String(e), false);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
+  document.querySelectorAll(".btn-reset-agent").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const role = btn.dataset.role;
+      const modelEl = document.querySelector(`.agent-model[data-role="${role}"]`);
+      const promptEl = document.querySelector(`.agent-prompt[data-role="${role}"]`);
+      const defPrompt = document.querySelector(`.default-prompt-store[data-role="${role}"]`);
+      const defModel = document.querySelector(`.default-model-store[data-role="${role}"]`);
+      if (modelEl && defModel) modelEl.value = defModel.value;
+      if (promptEl && defPrompt) promptEl.value = defPrompt.value;
+    });
+  });
+
+  document.querySelectorAll(".btn-save-workflow").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const name = btn.dataset.name;
+      const prompt = document.querySelector(`.workflow-prompt[data-name="${name}"]`)?.value;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/team/workflows/${name}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ prompt }),
+        });
+        const data = await res.json();
+        if (data.status === "ok") {
+          showStatus(`Workflow ${name}: сохранено`);
+          setTimeout(() => location.reload(), 800);
+        } else {
+          showStatus(data.message || data.detail || "Ошибка", false);
+        }
+      } catch (e) {
+        showStatus(String(e), false);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
+  document.getElementById("btn-reset-all").addEventListener("click", async () => {
+    if (!confirm("Сбросить все модели и промпты к значениям по умолчанию?")) return;
+    const btn = document.getElementById("btn-reset-all");
+    btn.disabled = true;
+    try {
+      const res = await fetch("/api/team/reset", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const data = await res.json();
+      if (data.status === "ok") {
+        showStatus(data.message || "Сброшено");
+        setTimeout(() => location.reload(), 800);
+      } else {
+        showStatus(data.message || data.detail || "Ошибка сброса", false);
+      }
+    } catch (e) {
+      showStatus(String(e), false);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>
+{% endblock %}

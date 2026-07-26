@@ -1,0 +1,51 @@
+# Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node / Expo (ADI projects)
+node_modules/
+.expo/
+dist/
+npm-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Large / generated ADI artifacts
+*.zip
+projects/**/expo/android/
+projects/**/expo/ios/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs & runtime
+*.log
+.tmp/
+.cache/
+
+# Docker local volumes (if any)
+postgres-data/
+qdrant-data/

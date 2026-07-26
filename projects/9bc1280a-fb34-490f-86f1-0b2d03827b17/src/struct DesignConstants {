@@ -1,0 +1,14 @@
+static let primaryButtonBaseSize: CGFloat = 200
+    static let primaryButtonSize: CGFloat = primaryButtonBaseSize * 1.2
+    static let flowerPetalCount: Int = 6
+    static let petalRadius: CGFloat = primaryButtonSize * 0.4
+    static let centerRadius: CGFloat = primaryButtonSize * 0.3
+    static let primaryGradient = LinearGradient(
+        colors: [Color(hex: "#9C27B0"), Color(hex: "#673AB7")],
+        startPoint: .topLeading, endPoint: .bottomTrailing
+    )
+    static let primaryButtonShadow = Shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 4)
+    static let primaryButtonFont = Font.system(size: 24, weight: .bold)
+    static let bloomScale: CGFloat = 1.05
+    static let bloomDuration: Double = 0.15
+}

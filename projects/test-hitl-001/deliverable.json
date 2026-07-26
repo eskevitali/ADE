@@ -1,0 +1,9 @@
+{
+  "project_id": "test-hitl-001",
+  "project_name": "HITL Test",
+  "type": "other",
+  "type_label": "Прочее",
+  "preview_url": "/projects/test-hitl-001",
+  "preview_label": "Артефакты проекта",
+  "instructions": "См. spec/, src/ и review/ в каталоге проекта."
+}

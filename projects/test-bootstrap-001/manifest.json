@@ -1,0 +1,22 @@
+{
+  "id": "test-bootstrap-001",
+  "name": "Test Project",
+  "idea": "A simple hello world API",
+  "path": "/root/ADE-V4/projects/test-bootstrap-001",
+  "network": "",
+  "status": "completed",
+  "created_at": "2026-07-12T18:28:07.976361+00:00",
+  "task_id": null,
+  "isolation_enabled": false,
+  "acceptance_status": "accepted",
+  "accepted_at": "2026-07-12T18:28:48.557914+00:00",
+  "last_revision_feedback": "",
+  "revision_count": 0,
+  "pending_revision_id": null,
+  "deploy_status": "running",
+  "rebuild_status": "",
+  "updated_at": "2026-07-12T20:14:54.268754+00:00",
+  "workspace_port": 18149,
+  "workspace_mode": "python_app",
+  "workspace_container_port": 8000
+}

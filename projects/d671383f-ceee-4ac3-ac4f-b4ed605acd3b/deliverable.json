@@ -1,0 +1,10 @@
+{
+  "project_id": "d671383f-ceee-4ac3-ac4f-b4ed605acd3b",
+  "project_name": "HITL Test V2",
+  "type": "simulator",
+  "type_label": "Интерактивный симулятор",
+  "preview_url": "/preview/d671383f-ceee-4ac3-ac4f-b4ed605acd3b/simulator",
+  "preview_label": "Открыть симулятор (браузер)",
+  "simulator_available": true,
+  "instructions": "Интерактивный симулятор в браузере: меняйте скорость и смотрите, как переменные влияют на ход часов. После Deploy — та же ссылка или /run/…"
+}

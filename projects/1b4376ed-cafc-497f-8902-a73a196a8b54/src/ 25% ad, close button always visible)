@@ -1,0 +1,35 @@
+class PostSendDialog(
+    private val activity: Activity,
+    private val location: LocationData
+) : Dialog(activity, R.style.PostSendDialog) {
+
+    private lateinit var adView: AdView
+    private val adManager: AdManager by lazy { /* injected */ }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.dialog_post_send)
+        
+        // 75% content area (message input + status)
+        // 25% bottom ad container (only if !premium && !disableAds)
+        val adContainer = findViewById<FrameLayout>(R.id.ad_container)
+        
+        if (adManager.shouldShowAds()) {
+            adView = AdView(activity).apply {
+                adSize = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(activity, 320)
+                adUnitId = "ca-app-pub-XXXXXX/XXXXXX"
+            }
+            adContainer.addView(adView)
+            adManager.loadBannerAd(adView)
+        } else {
+            adContainer.visibility = View.GONE
+        }
+
+        findViewById<Button>(R.id.btn_close).setOnClickListener {
+            dismiss()
+            activity.finish()
+        }
+        
+        // Send additional message button logic...
+    }
+}

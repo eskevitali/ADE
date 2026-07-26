@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Вход — ADE v4</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <style>
+    body { background: radial-gradient(ellipse at top, #1e1b4b 0%, #0b0f19 50%); }
+    .glass { background: rgba(17,24,39,0.8); backdrop-filter: blur(12px); border: 1px solid rgba(99,102,241,0.2); }
+  </style>
+</head>
+<body class="h-full text-gray-100 min-h-screen flex items-center justify-center px-4">
+  <div class="w-full max-w-md">
+    <div class="text-center mb-8">
+      <h1 class="text-3xl font-bold text-indigo-300">ADE v4</h1>
+      <p class="text-gray-400 mt-2">Вход в панель управления</p>
+    </div>
+
+    <div class="glass rounded-xl p-6">
+      {% if error %}
+      <div class="mb-4 px-4 py-3 rounded-lg bg-red-900/40 border border-red-500/30 text-red-300 text-sm">
+        {{ error }}
+      </div>
+      {% endif %}
+
+      <form method="post" action="/auth/login" class="space-y-5">
+        <input type="hidden" name="next" value="{{ next_url }}">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Email / логин</label>
+          <input type="text" name="username" required autocomplete="username"
+            value="{{ username }}"
+            class="w-full bg-gray-900/80 border border-indigo-500/30 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="admin@example.com">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Пароль</label>
+          <input type="password" name="password" required autocomplete="current-password"
+            class="w-full bg-gray-900/80 border border-indigo-500/30 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="••••••••">
+        </div>
+        <button type="submit"
+          class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-3 rounded-lg transition">
+          Войти
+        </button>
+      </form>
+    </div>
+
+    <p class="text-center text-xs text-gray-600 mt-6">Защищённый доступ · ADE Harness</p>
+  </div>
+</body>
+</html>

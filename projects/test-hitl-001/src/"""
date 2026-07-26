@@ -1,0 +1,143 @@
+Цветная Python Hello Function
+
+Модуль для цветного вывода приветственных сообщений с поддержкой
+кроссплатформенности через colorama (рекомендуется) или ANSI-коды.
+
+Требования:
+- Python 3.6+
+- pip install colorama (опционально, но рекомендуется)
+"""
+
+from dataclasses import dataclass
+from typing import Optional
+import sys
+import os
+
+try:
+    from colorama import init, Fore, Style
+    COLORAMA_AVAILABLE = True
+    init(autoreset=True)
+except ImportError:
+    COLORAMA_AVAILABLE = False
+
+
+@dataclass
+class HelloConfig:
+    """Конфигурация для ColoredHello."""
+    default_color: str = "green"
+    fallback_enabled: bool = True
+    auto_reset: bool = True
+    bright_colors: bool = False
+
+
+class ColoredHello:
+    """Класс для управления цветным выводом приветствий."""
+
+    COLORS = {
+        'red': Fore.RED if COLORAMA_AVAILABLE else '\033[31m',
+        'green': Fore.GREEN if COLORAMA_AVAILABLE else '\033[32m',
+        'blue': Fore.BLUE if COLORAMA_AVAILABLE else '\033[34m',
+        'yellow': Fore.YELLOW if COLORAMA_AVAILABLE else '\033[33m',
+        'magenta': Fore.MAGENTA if COLORAMA_AVAILABLE else '\033[35m',
+        'cyan': Fore.CYAN if COLORAMA_AVAILABLE else '\033[36m',
+        'white': Fore.WHITE if COLORAMA_AVAILABLE else '\033[37m',
+        'bright_red': Fore.LIGHTRED_EX if COLORAMA_AVAILABLE else '\033[91m',
+        'bright_green': Fore.LIGHTGREEN_EX if COLORAMA_AVAILABLE else '\033[92m',
+        'bright_blue': Fore.LIGHTBLUE_EX if COLORAMA_AVAILABLE else '\033[94m',
+        'bright_yellow': Fore.LIGHTYELLOW_EX if COLORAMA_AVAILABLE else '\033[93m',
+        'bright_magenta': Fore.LIGHTMAGENTA_EX if COLORAMA_AVAILABLE else '\033[95m',
+        'bright_cyan': Fore.LIGHTCYAN_EX if COLORAMA_AVAILABLE else '\033[96m',
+    }
+
+    STYLES = {
+        'normal': Style.NORMAL if COLORAMA_AVAILABLE else '',
+        'bright': Style.BRIGHT if COLORAMA_AVAILABLE else '\033[1m',
+        'dim': Style.DIM if COLORAMA_AVAILABLE else '\033[2m',
+    }
+
+    RESET = Style.RESET_ALL if COLORAMA_AVAILABLE else '\033[0m'
+
+    def __init__(self, config: Optional[HelloConfig] = None):
+        self.config = config or HelloConfig()
+
+    def _check_color_support(self) -> bool:
+        """Проверяет поддержку цветов терминалом."""
+        if not hasattr(sys.stdout, 'isatty') or not sys.stdout.isatty():
+            return False
+        if os.getenv('TERM') == 'dumb':
+            return False
+        if os.name == 'nt' and not os.getenv('ANSICON'):
+            return COLORAMA_AVAILABLE
+        return True
+
+    def print_hello(self, color: Optional[str] = None, message: Optional[str] = None,
+                    style: str = "normal") -> None:
+        """Выводит цветное приветственное сообщение."""
+        color = color or self.config.default_color
+        message = message or "Hello, World!"
+
+        if not self._check_color_support() and self.config.fallback_enabled:
+            print(message)
+            return
+
+        color_code = self.COLORS.get(color.lower(), self.COLORS['green'])
+        style_code = self.STYLES.get(style.lower(), self.STYLES['normal'])
+
+        colored_message = f"{style_code}{color_code}{message}"
+        if self.config.auto_reset:
+            colored_message += self.RESET
+
+        print(colored_message)
+
+    def set_default_color(self, color: str) -> None:
+        """Устанавливает цвет по умолчанию."""
+        if color.lower() in self.COLORS:
+            self.config.default_color = color.lower()
+
+    def is_color_supported(self) -> bool:
+        """Публичный метод проверки поддержки цветов."""
+        return self._check_color_support()
+
+
+# Глобальный экземпляр для удобства
+_default_hello = ColoredHello()
+
+
+def hello(color: str = "green", message: str = "Hello, World!",
+          style: str = "normal") -> None:
+    """Выводит цветное приветственное сообщение.
+
+    Args:
+        color: Цвет текста (red, green, blue и др.)
+        message: Текст сообщения
+        style: Стиль (normal, bright, dim)
+    """
+    _default_hello.print_hello(color, message, style)
+
+
+def color_demo() -> None:
+    """Демонстрирует все доступные цвета и стили."""
+    print("🎨 Демонстрация цветов:")
+    print("-" * 30)
+    for color_name in ColoredHello.COLORS.keys():
+        hello(color_name, f"Hello in {color_name}!")
+
+    print("\n🎭 Демонстрация стилей:")
+    print("-" * 30)
+    for style_name in ColoredHello.STYLES.keys():
+        hello("cyan", f"Hello in {style_name} style!", style_name)
+
+
+def set_default_color(color: str) -> None:
+    """Устанавливает глобальный цвет по умолчанию."""
+    _default_hello.set_default_color(color)
+
+
+if __name__ == "__main__":
+    print("🌈 Цветная Hello Function")
+    print("=" * 40)
+    hello()
+    hello("red", "Привет, мир!")
+    hello("blue", "Hello, Python!", "bright")
+    print("\n")
+    color_demo()

@@ -1,0 +1,25 @@
+override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val path = Path()
+        val center = Offset(size.width / 2f, size.height / 2f)
+        val centerRadius = DesignConstants.CENTER_RADIUS_DP.dp.toPx(density)
+        val petalRadius = DesignConstants.PETAL_RADIUS_DP.dp.toPx(density)
+        val petalCount = DesignConstants.FLOWER_PETAL_COUNT
+        
+        for (i in 0 until petalCount) {
+            val angle = i * (2 * PI / petalCount).toFloat()
+            val petalCenter = Offset(
+                center.x + cos(angle) * (centerRadius + petalRadius * 0.3f),
+                center.y + sin(angle) * (centerRadius + petalRadius * 0.3f)
+            )
+            val petalRect = Rect(
+                left = petalCenter.x - petalRadius * 0.6f,
+                top = petalCenter.y - petalRadius,
+                right = petalCenter.x + petalRadius * 0.6f,
+                bottom = petalCenter.y + petalRadius
+            )
+            path.addOval(petalRect)
+        }
+        path.addOval(Rect(center = center, radius = centerRadius))
+        return Outline.Generic(path)
+    }
+}

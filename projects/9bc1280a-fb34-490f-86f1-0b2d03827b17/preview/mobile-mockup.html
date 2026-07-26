@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Я ТУТ v3 — Mockup</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: #0b0f19; font-family: system-ui, sans-serif; color: #e5e7eb; }
+    .phone { width: 320px; height: 640px; border: 12px solid #1f2937; border-radius: 36px;
+      background: linear-gradient(180deg, #1e1b4b, #111827); box-shadow: 0 25px 50px rgba(0,0,0,.5);
+      overflow: hidden; display: flex; flex-direction: column; position: relative; }
+    .status { padding: 12px 16px; font-size: 12px; text-align: center; background: rgba(0,0,0,.3);
+      display: flex; align-items: center; justify-content: space-between; }
+    .gps-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 6px #10b981; }
+    .content { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 24px 20px; gap: 16px; }
+    .btn-main { width: 100%; max-width: 240px; padding: 20px; border: none; border-radius: 16px;
+      background: linear-gradient(135deg, #6366f1, #4f46e5); color: white; font-size: 22px;
+      font-weight: 700; letter-spacing: 0.05em; cursor: pointer; box-shadow: 0 8px 24px rgba(99,102,241,.4); }
+    .btn-main:active { transform: scale(0.97); }
+    .settings { position: absolute; top: 52px; right: 16px; }
+    .settings-btn { background: rgba(255,255,255,.1); border: none; color: #9ca3af; width: 36px; height: 36px;
+      border-radius: 10px; cursor: pointer; font-size: 18px; }
+    .settings-panel { display: none; position: absolute; top: 96px; right: 16px; width: 200px;
+      background: #1f2937; border-radius: 12px; padding: 12px; font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+    .settings-panel.open { display: block; }
+    .settings-panel label { display: block; color: #9ca3af; margin-bottom: 4px; font-size: 11px; }
+    .settings-panel select { width: 100%; background: #111827; color: #e5e7eb; border: 1px solid #374151;
+      border-radius: 8px; padding: 6px 8px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <div class="status">
+      <span class="gps-dot" title="GPS активен"></span>
+      <span>Я ТУТ v3</span>
+      <span style="width:8px"></span>
+    </div>
+    <div class="settings">
+      <button class="settings-btn" onclick="document.getElementById('panel').classList.toggle('open')" title="Настройки">⚙</button>
+      <div id="panel" class="settings-panel">
+        <label>Контакт</label>
+        <select><option>Выбрать контакт…</option></select>
+        <label>Способ отправки</label>
+        <select><option>SMS</option><option>WhatsApp</option><option>Telegram</option></select>
+      </div>
+    </div>
+    <div class="content">
+      <button class="btn-main" onclick="alert('GPS: координаты отправлены')">Я ТУТ</button>
+    </div>
+  </div>
+</body>
+</html>

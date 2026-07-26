@@ -1,0 +1,40 @@
+fun FlowerButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    var isPressed by remember { mutableStateOf(false) }
+    var isBloomAnimating by remember { mutableStateOf(false) }
+    
+    val scale by animateFloatAsState(
+        targetValue = when {
+            isPressed -> 0.95f
+            isBloomAnimating -> DesignConstants.BLOOM_SCALE
+            else -> 1f
+        },
+        animationSpec = tween(durationMillis = if (isBloomAnimating) DesignConstants.BLOOM_DURATION_MS else 100)
+    )
+    
+    Box(
+        modifier = modifier
+            .size(DesignConstants.PRIMARY_BUTTON_SIZE_DP.dp)
+            .scale(scale)
+            .clip(FlowerShape())
+            .background(brush = DesignConstants.PRIMARY_GRADIENT)
+            .shadow(elevation = DesignConstants.PRIMARY_BUTTON_ELEVATION_DP.dp, shape = FlowerShape())
+            .clickable {
+                isBloomAnimating = true
+                CoroutineScope(Dispatchers.Main).launch {
+                    delay(DesignConstants.BLOOM_DURATION_MS.toLong())
+                    isBloomAnimating = false
+                }
+                onClick()
+            }
+            .pointerInput(Unit) {
+                detectTapGestures(onPress = {
+                    isPressed = true
+                    tryAwaitRelease()
+                    isPressed = false
+                })
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text = text, style = DesignConstants.PRIMARY_BUTTON_TEXT_STYLE)
+    }
+}

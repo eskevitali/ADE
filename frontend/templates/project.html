@@ -1,0 +1,518 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} — ADE v4{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="/dashboard" class="text-indigo-400 hover:text-indigo-300 text-sm">← Dashboard</a>
+  <h1 class="text-2xl font-bold text-white mt-2">{{ project.name }}</h1>
+  <p class="text-gray-500 text-sm font-mono mt-1">{{ project.id }}</p>
+  <div class="flex flex-wrap gap-2 mt-3">
+    <button type="button" id="btn-duplicate-project"
+      class="text-xs px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 transition">
+      Дубликат для новой версии
+    </button>
+    <button type="button" id="btn-delete-project"
+      class="text-xs px-3 py-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/50 text-red-300/90 transition"
+      data-name="{{ project.name }}">
+      Удалить проект
+    </button>
+  </div>
+</div>
+
+{% if pending_revision_id %}
+<div class="glass rounded-xl p-4 mb-6 border border-amber-500/40 bg-amber-950/20">
+  <p class="text-amber-200 text-sm mb-2">Есть непросмотренная доработка #{{ pending_revision_id }}</p>
+  <p class="text-amber-100/70 text-xs mb-3">Сначала просмотрите и утвердите изменения — затем запустится пересборка кода и деплой.</p>
+  <a href="/projects/{{ project.id }}/revision/{{ pending_revision_id }}"
+    class="inline-block bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-medium">
+    Просмотреть изменения в ТЗ и Spec →
+  </a>
+</div>
+{% endif %}
+
+{% if processing_status %}
+<div id="processing-progress" class="mb-6"></div>
+{% endif %}
+
+{% if rebuild_status == 'rebuilding' or rebuild_status == 'queued' or rebuild_status == 'recovering' %}
+<div id="rebuild-progress-wrap" class="mb-6"></div>
+{% if recovery_status == 'recovering' and recovery_attempts %}
+<p class="text-xs text-amber-300/90 mb-2">
+  Tester восстанавливает… попытка {{ recovery_attempts }}/{{ recovery_max_attempts }}
+  {% if recovery_message %}<span class="block text-gray-400 mt-1">{{ recovery_message }}</span>{% endif %}
+</p>
+{% endif %}
+{% elif recovery_status == 'escalated' %}
+<div class="glass rounded-xl p-4 mb-6 border border-amber-500/30 bg-amber-950/20">
+  <p class="text-amber-200 text-sm">
+    Автовосстановление исчерпано ({{ recovery_attempts }}/{{ recovery_max_attempts }}).
+    Требуется вмешательство: новая доработка или дубликат проекта.
+  </p>
+  {% if recovery_message %}<p class="text-xs text-amber-300/80 mt-2">{{ recovery_message }}</p>{% endif %}
+</div>
+{% elif rebuild_status == 'completed' and deploy_status %}
+<div class="glass rounded-xl p-4 mb-6 border {% if deploy_status == 'failed' %}border-red-500/30 bg-red-950/20{% else %}border-emerald-500/30 bg-emerald-950/20{% endif %}">
+  <p class="{% if deploy_status == 'failed' %}text-red-200{% else %}text-emerald-200{% endif %} text-sm">
+    Деплой после доработки: <span class="font-mono">{{ deploy_status }}</span>
+    {% if deploy_error %}<span class="block text-xs mt-1 text-red-300/90">{{ deploy_error }}</span>{% endif %}
+  </p>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+  <div class="glass rounded-xl p-4">
+    <div class="text-sm text-gray-400 mb-1">Статус</div>
+    <span class="px-2 py-1 rounded-full text-sm
+      {% if project.status == 'completed' %}bg-emerald-900/50 text-emerald-300
+      {% elif project.status == 'ready' %}bg-gray-800 text-gray-400
+      {% else %}bg-amber-900/50 text-amber-300{% endif %}">
+      {{ project.status }}
+    </span>
+  </div>
+  <div class="glass rounded-xl p-4">
+    <div class="text-sm text-gray-400 mb-1">Изоляция</div>
+    <div class="text-white">{{ 'Docker network' if project.isolation_enabled else 'Local' }}</div>
+    {% if project.network %}<div class="text-xs font-mono text-gray-500 mt-1">{{ project.network }}</div>{% endif %}
+  </div>
+  <div class="glass rounded-xl p-4">
+    <div class="text-sm text-gray-400 mb-1">Создан</div>
+    <div class="text-white text-sm">{{ project.created_at[:19].replace('T', ' ') }} UTC</div>
+    {% if workflow_url %}
+    <a href="{{ workflow_url }}" class="inline-block mt-2 text-indigo-400 hover:text-indigo-300 text-sm">Live Workflow →</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="glass rounded-xl p-5 mb-6">
+  <h2 class="font-semibold mb-2">Идея</h2>
+  <p class="text-gray-300 whitespace-pre-wrap">{{ project.idea }}</p>
+</div>
+
+<div id="workspace-panel" class="glass rounded-xl p-5 mb-6 border border-cyan-500/20">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+    <h2 class="font-semibold text-cyan-300">Running Workspace</h2>
+    <button id="btn-deploy" type="button"
+      class="bg-cyan-700 hover:bg-cyan-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
+      Deploy
+    </button>
+  </div>
+  <p class="text-xs text-gray-500 mb-3">Deploy занимает до 1–2 мин. Для симуляторов и веб-приложений — ссылка <code class="text-gray-400">/preview/…/simulator</code> или <code class="text-gray-400">/run/…</code>. Консольные скрипты без UI — только логи.</p>
+  <div id="workspace-status" class="text-sm space-y-2">
+    <div class="flex flex-wrap gap-4">
+      <span class="text-gray-400">Контейнер: <span id="ws-container" class="font-mono text-gray-300">{{ workspace.container or '—' }}</span></span>
+      <span class="text-gray-400">Состояние: <span id="ws-state" class="{% if workspace.running %}text-emerald-300{% else %}text-amber-300{% endif %}">{{ workspace.state or 'not_created' }}</span></span>
+      <span class="text-gray-400">Режим: <span id="ws-mode" class="font-mono text-gray-300">{{ workspace_mode or workspace.mode or '—' }}</span></span>
+      <span class="text-gray-400">Деплой: <span id="ws-deploy" class="font-mono {% if deploy_status == 'failed' %}text-red-300{% endif %}">{{ deploy_status or '—' }}</span></span>
+    </div>
+    {% if deploy_error %}
+    <p id="ws-deploy-error" class="text-xs text-red-300/90 bg-red-950/30 rounded p-2">{{ deploy_error }}</p>
+    {% else %}
+    <p id="ws-deploy-error" class="text-xs text-red-300/90 bg-red-950/30 rounded p-2 hidden"></p>
+    {% endif %}
+    {% if workspace.url %}
+    <a id="ws-url" href="{{ workspace.url }}" target="_blank" rel="noopener"
+      class="inline-block text-cyan-400 hover:text-cyan-300 text-sm">{{ workspace.url_label or workspace.url }}</a>
+    {% else %}
+    <span id="ws-url" class="text-gray-600 text-sm">URL появится после Deploy</span>
+    {% endif %}
+    <pre id="ws-logs" class="text-xs text-gray-500 bg-gray-900/50 rounded p-3 max-h-32 overflow-y-auto whitespace-pre-wrap">{{ workspace.logs_tail or '' }}</pre>
+  </div>
+  {% if recent_events %}
+  <details class="mt-4">
+    <summary class="text-xs text-gray-500 cursor-pointer">Последние события (PostgreSQL)</summary>
+    <ul class="mt-2 space-y-1 text-xs font-mono text-gray-500">
+      {% for ev in recent_events %}
+      <li>{{ ev.ts[:19] }} · {{ ev.event_type }} · {{ ev.actor }}</li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+  <p id="deploy-msg" class="text-sm text-gray-500 mt-2"></p>
+  <p id="deploy-spinner" class="text-sm text-cyan-300/80 mt-1 hidden">⏳ Деплой выполняется…</p>
+</div>
+
+{% if deliverable and deliverable.type %}
+<div id="reflection-panel" class="glass rounded-xl p-5 mb-6 border border-amber-500/20 scroll-mt-24"
+  data-project-id="{{ project.id }}" data-acceptance="{{ acceptance_status }}">
+  <h2 class="font-semibold text-amber-200 mb-2">Обратная рефлексия</h2>
+  <p class="text-sm text-gray-400 mb-4">Протестируйте результат (превью / симулятор), затем примите или запросите доработку.</p>
+  <div class="flex flex-wrap gap-3 mb-4">
+    <button id="btn-accept" type="button"
+      class="px-4 py-2 rounded-lg text-sm font-medium transition
+      {% if acceptance_status == 'accepted' %}bg-gray-700 text-gray-400 cursor-default{% else %}bg-emerald-600 hover:bg-emerald-500 text-white{% endif %}"
+      {% if acceptance_status == 'accepted' %}disabled{% endif %}>
+      {% if acceptance_status == 'accepted' %}Принято ✓{% else %}Принять{% endif %}
+    </button>
+    <button id="btn-revise-toggle" type="button"
+      class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
+      Доработать
+    </button>
+  </div>
+  <div id="revise-form" class="hidden">
+    <textarea id="revise-feedback" rows="4" placeholder="Что улучшить после тестирования? (функции, UX, баги…)"
+      class="w-full bg-gray-900/80 border border-indigo-500/30 rounded-lg px-4 py-3 text-white text-sm mb-3"></textarea>
+    <div id="revise-progress" class="hidden mb-3"></div>
+    <button id="btn-revise-submit" type="button"
+      class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium">
+      Отправить на доработку ТЗ и Spec
+    </button>
+    <p id="revise-status" class="text-sm text-gray-500 mt-2"></p>
+  </div>
+  {% if revision_count > 0 %}
+  <p class="text-xs text-gray-600 mt-2">Итераций доработки: {{ revision_count }}</p>
+  {% endif %}
+</div>
+
+<div class="glass rounded-xl p-5 mb-6 border border-emerald-500/20">
+  <h2 class="font-semibold text-emerald-300 mb-3">Результат — {{ deliverable.type_label }}</h2>
+  <div class="flex flex-wrap gap-2 mb-3">
+    {% if deliverable.preview_url %}
+    <a href="{{ deliverable.preview_url }}" target="_blank" rel="noopener"
+      class="inline-block bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg text-sm font-medium">
+      {{ deliverable.preview_label }}
+    </a>
+    {% endif %}
+    {% if deliverable.expo_download_url %}
+    <a href="{{ deliverable.expo_download_url }}"
+      title="Соберёт свежий ZIP из текущего Expo-проекта и начнёт скачивание"
+      class="inline-block bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg text-sm font-medium">
+      {{ deliverable.expo_download_label or "Создать и скачать ZIP" }}
+    </a>
+    {% endif %}
+  </div>
+  {% if deliverable.instructions %}
+  <pre class="text-sm text-gray-400 whitespace-pre-wrap">{{ deliverable.instructions }}</pre>
+  {% endif %}
+  {% if deliverable.simulator_exports %}
+  <div class="mt-4 space-y-2">
+    <h3 class="text-sm font-medium text-gray-300">Команды после распаковки ZIP (на вашем ПК)</h3>
+    {% for exp in deliverable.simulator_exports %}
+    <div class="text-xs font-mono bg-gray-900/50 rounded p-2">
+      <span class="text-gray-500">{{ exp.platform }}:</span> {{ exp.command }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if spec or src_files or review or tz %}
+<details class="glass rounded-xl mb-6">
+  <summary class="p-4 cursor-pointer font-semibold text-gray-400 hover:text-gray-300">
+    Все артефакты (код, ТЗ, Spec) — без подсветки изменений
+  </summary>
+  <div class="px-4 pb-4 space-y-4">
+    {% if tz %}
+    <div><h3 class="text-indigo-300 text-sm font-medium mb-2">ТЗ</h3>
+    <pre class="text-sm text-gray-300 whitespace-pre-wrap">{{ tz }}</pre></div>
+    {% endif %}
+    {% if spec %}
+    <div><h3 class="text-indigo-300 text-sm font-medium mb-2">Spec</h3>
+    <pre class="text-sm text-gray-300 whitespace-pre-wrap">{{ spec }}</pre></div>
+    {% endif %}
+    {% if src_files %}
+    <div><h3 class="text-indigo-300 text-sm font-medium mb-2">Source</h3>
+    {% for file in src_files %}
+    <pre class="text-xs text-gray-400 mb-2">src/{{ file.name }}</pre>
+    <pre class="text-sm text-gray-300 whitespace-pre-wrap bg-gray-900/50 rounded p-2 mb-3">{{ file.content }}</pre>
+    {% endfor %}</div>
+    {% endif %}
+    {% if review %}
+    <div><h3 class="text-indigo-300 text-sm font-medium mb-2">Review</h3>
+    <pre class="text-sm text-gray-300 whitespace-pre-wrap">{{ review }}</pre></div>
+    {% endif %}
+  </div>
+</details>
+{% endif %}
+
+{% if not spec and not src_files and not review and not tz %}
+<div class="glass rounded-xl p-8 text-center text-gray-500">
+  Артефакты проекта ещё не сгенерированы. Workflow в процессе или не запускался.
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const projectId = "{{ project.id }}";
+
+  function setWorkspaceUrl(ws) {
+    const urlEl = document.getElementById("ws-url");
+    if (!urlEl) return;
+    const label = ws?.url_label || ws?.url || "";
+    if (ws?.url) {
+      if (urlEl.tagName === "SPAN") {
+        const a = document.createElement("a");
+        a.id = "ws-url";
+        a.href = ws.url;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.className = "inline-block text-cyan-400 hover:text-cyan-300 text-sm";
+        a.textContent = label;
+        urlEl.replaceWith(a);
+      } else {
+        urlEl.href = ws.url;
+        urlEl.textContent = label;
+        urlEl.className = "inline-block text-cyan-400 hover:text-cyan-300 text-sm";
+      }
+      return;
+    }
+    const hint = label || (ws?.running
+      ? "Контейнер запущен — публичный URL недоступен для этого режима"
+      : "URL появится после успешного Deploy (режим python_app / web / mobile_preview)");
+    if (urlEl.tagName === "A") {
+      const span = document.createElement("span");
+      span.id = "ws-url";
+      span.className = "text-gray-500 text-sm";
+      span.textContent = hint;
+      urlEl.replaceWith(span);
+    } else {
+      urlEl.textContent = hint;
+      urlEl.className = "text-gray-500 text-sm";
+    }
+  }
+
+  function applyWorkspaceStatus(data) {
+    if (data.status !== "ok") return;
+    const ws = data.workspace || {};
+    const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    set("ws-container", ws.container || "—");
+    set("ws-state", ws.state || "not_created");
+    set("ws-mode", ws.mode || data.project?.workspace_mode || "—");
+    const deploySt = data.project?.deploy_status || "—";
+    const deployEl = document.getElementById("ws-deploy");
+    if (deployEl) {
+      deployEl.textContent = deploySt;
+      deployEl.className = `font-mono ${deploySt === "failed" ? "text-red-300" : ""}`;
+    }
+    const errEl = document.getElementById("ws-deploy-error");
+    const err = data.project?.deploy_error || "";
+    if (errEl) {
+      if (err) {
+        errEl.textContent = err;
+        errEl.classList.remove("hidden");
+      } else {
+        errEl.textContent = "";
+        errEl.classList.add("hidden");
+      }
+    }
+    if (ws.logs_tail) set("ws-logs", ws.logs_tail);
+    setWorkspaceUrl(ws);
+  }
+
+  async function refreshWorkspaceStatus() {
+    const res = await fetch(`/api/projects/${projectId}/status`);
+    const data = await res.json();
+    applyWorkspaceStatus(data);
+    return data;
+  }
+
+  document.getElementById("btn-deploy")?.addEventListener("click", async () => {
+    const btn = document.getElementById("btn-deploy");
+    const msg = document.getElementById("deploy-msg");
+    const spinner = document.getElementById("deploy-spinner");
+    btn.disabled = true;
+    msg.textContent = "";
+    msg.className = "text-sm text-gray-500 mt-2";
+    spinner?.classList.remove("hidden");
+    document.getElementById("ws-deploy-error")?.classList.add("hidden");
+    const pollTimer = setInterval(refreshWorkspaceStatus, 3000);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/deploy`, { method: "POST" });
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        msg.textContent = res.ok
+          ? "Некорректный ответ сервера"
+          : `Ошибка сервера (${res.status}): ${text.slice(0, 200)}`;
+        msg.className = "text-sm text-red-300 mt-2";
+        return;
+      }
+      if (data.status === "ok") {
+        msg.textContent = data.workspace?.url_label || "Workspace запущен.";
+        msg.className = "text-sm text-emerald-300 mt-2";
+        applyWorkspaceStatus({ status: "ok", project: { deploy_status: "running" }, workspace: data.workspace || {} });
+        await refreshWorkspaceStatus();
+      } else {
+        const detail = data.detail || data.message || "Ошибка деплоя";
+        msg.textContent = `Деплой не удался: ${detail}`;
+        msg.className = "text-sm text-red-300 mt-2";
+        const errEl = document.getElementById("ws-deploy-error");
+        if (errEl) {
+          errEl.textContent = detail;
+          errEl.classList.remove("hidden");
+        }
+        await refreshWorkspaceStatus();
+      }
+    } catch (e) {
+      msg.textContent = `Ошибка сети: ${e}`;
+      msg.className = "text-sm text-red-300 mt-2";
+    } finally {
+      clearInterval(pollTimer);
+      spinner?.classList.add("hidden");
+      btn.disabled = false;
+    }
+  });
+
+  refreshWorkspaceStatus();
+
+  document.getElementById("btn-duplicate-project")?.addEventListener("click", async () => {
+    const btn = document.getElementById("btn-duplicate-project");
+    if (!confirm("Создать дубликат этого проекта для следующей версии?\nИсходник останется без изменений.")) {
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = "Копирование…";
+    try {
+      const res = await fetch(`/api/projects/${projectId}/duplicate`, { method: "POST" });
+      const data = await res.json();
+      if (data.status === "ok" && data.redirect_url) {
+        window.location.href = data.redirect_url;
+        return;
+      }
+      alert(data.message || data.detail || "Не удалось создать дубликат");
+    } catch (e) {
+      alert(String(e));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Дубликат для новой версии";
+    }
+  });
+
+  document.getElementById("btn-delete-project")?.addEventListener("click", async () => {
+    const btn = document.getElementById("btn-delete-project");
+    const name = btn.dataset.name;
+    const elig = await fetch(`/api/projects/${projectId}/delete-eligibility`).then((r) => r.json());
+    if (!elig.can_delete) {
+      alert(elig.block_reason || "Удаление сейчас недоступно");
+      return;
+    }
+    const typed = prompt(`Удалить «${name}» безвозвратно?\nВведите название:`);
+    if (typed === null || typed.trim() !== name.trim()) return;
+    btn.disabled = true;
+    const res = await fetch(`/api/projects/${projectId}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm_name: typed.trim() }),
+    });
+    const data = await res.json();
+    if (data.status === "ok") window.location.href = data.redirect_url || "/dashboard";
+    else { alert(data.message || "Ошибка"); btn.disabled = false; }
+  });
+</script>
+{% if deliverable and deliverable.type %}
+<script>
+  const acceptBtn = document.getElementById("btn-accept");
+  const reviseToggle = document.getElementById("btn-revise-toggle");
+  const reviseForm = document.getElementById("revise-form");
+  const reviseSubmit = document.getElementById("btn-revise-submit");
+  const reviseStatus = document.getElementById("revise-status");
+
+  acceptBtn?.addEventListener("click", async () => {
+    if (acceptBtn.disabled) return;
+    const res = await fetch(`/api/projects/${projectId}/accept`, { method: "POST" });
+    const data = await res.json();
+    if (data.status === "ok") {
+      acceptBtn.textContent = "Принято ✓";
+      acceptBtn.disabled = true;
+      acceptBtn.className = "px-4 py-2 rounded-lg text-sm font-medium bg-gray-700 text-gray-400 cursor-default";
+    } else {
+      reviseStatus.textContent = data.message || "Ошибка";
+    }
+  });
+
+  reviseToggle?.addEventListener("click", () => {
+    reviseForm.classList.toggle("hidden");
+    if (!reviseForm.classList.contains("hidden")) {
+      acceptBtn.disabled = false;
+      acceptBtn.textContent = "Принять";
+      acceptBtn.className = "px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition";
+    }
+  });
+
+  let reviseProgress = null;
+  const rebuildProgress = (document.getElementById("rebuild-progress-wrap") && window.ADE_PIPELINES)
+    ? new PipelineProgress("rebuild-progress-wrap", window.ADE_PIPELINES.rebuild) : null;
+  if (rebuildProgress) {
+    rebuildProgress.show();
+    const initPhase = "{{ rebuild_phase }}" || "{{ rebuild_status }}";
+    if (initPhase && initPhase !== "queued") rebuildProgress.setByKey(initPhase, "Пересборка…");
+    else rebuildProgress.setByKey("queued", "В очереди…");
+  }
+  {% if processing_status %}
+  const procProgress = new PipelineProgress("processing-progress", window.ADE_PIPELINES.revise);
+  procProgress.show();
+  procProgress.setByKey("architect", "Architect обновляет ТЗ и Spec…");
+  {% endif %}
+
+  reviseSubmit?.addEventListener("click", async () => {
+    const feedback = document.getElementById("revise-feedback").value.trim();
+    if (feedback.length < 3) { reviseStatus.textContent = "Опишите доработку подробнее"; return; }
+    reviseSubmit.disabled = true;
+    reviseStatus.textContent = "";
+    const rpEl = document.getElementById("revise-progress");
+    rpEl.classList.remove("hidden");
+    reviseProgress = new PipelineProgress(rpEl, window.ADE_PIPELINES.revise);
+    reviseProgress.setByKey("feedback", "Отправка обратной связи…");
+    reviseProgress.setByKey("architect", "Architect обновляет ТЗ и Spec…");
+    try {
+      const res = await fetch(`/api/projects/${projectId}/revise`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedback }),
+      });
+      const data = await res.json();
+      if (data.status === "ok" && data.redirect_url) {
+        reviseStatus.textContent = "Готово. Открываем сравнение изменений…";
+        window.location.href = data.redirect_url;
+      } else if (data.status === "ok") {
+        reviseStatus.textContent = data.message;
+      } else if (data.message === "pending_review" && data.redirect_url) {
+        reviseStatus.textContent = "Сначала утвердите текущую доработку…";
+        window.location.href = data.redirect_url;
+      } else {
+        reviseStatus.textContent = data.message || "Ошибка";
+      }
+    } catch (e) {
+      reviseStatus.textContent = String(e);
+    }
+    reviseSubmit.disabled = false;
+  });
+
+  const PHASE_LABELS = {
+    queued: "В очереди…", coder: "Coder генерирует код…", reviewer: "Reviewer проверяет…",
+    mockup: "Обновление превью…", deploy: "Docker compose up…", done: "Готово",
+    retry_deploy: "Tester: повтор деплоя…", fix_code: "Tester: правка кода…",
+    recovering: "Tester восстанавливает…",
+  };
+  if (rebuildProgress || new URLSearchParams(location.search).get("rebuild")) {
+    const poll = async () => {
+      const res = await fetch(`/api/projects/${projectId}/rebuild-status`);
+      const data = await res.json();
+      if (!data || data.status !== "ok") return;
+      const phase = data.rebuild_phase || data.rebuild_status;
+      if (data.recovery_status === "escalated") {
+        rebuildProgress?.fail("Автовосстановление исчерпано");
+        setTimeout(() => location.reload(), 2000);
+        return;
+      }
+      if (data.rebuild_status === "completed") {
+        rebuildProgress?.complete("Пересборка завершена. Проверьте превью.");
+        setTimeout(() => location.reload(), 1500);
+        return;
+      }
+      if (data.rebuild_status === "failed") {
+        rebuildProgress?.fail(data.recovery_message || "Ошибка пересборки");
+        return;
+      }
+      if (phase && rebuildProgress) {
+        rebuildProgress.setByKey(phase, PHASE_LABELS[phase] || phase);
+      }
+      setTimeout(poll, 2500);
+    };
+    poll();
+  }
+</script>
+{% endif %}
+{% endblock %}

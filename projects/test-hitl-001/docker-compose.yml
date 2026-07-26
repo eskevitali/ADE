@@ -1,0 +1,12 @@
+# ADI workspace — HITL Test
+# mode: python_script
+services:
+  workspace:
+    image: python:3.12-slim
+    container_name: ade-adi-test-hitl-001-workspace
+    working_dir: /workspace
+    volumes:
+      - /root/ADE-V4/projects/test-hitl-001/src:/workspace/src
+      - /root/ADE-V4/projects/test-hitl-001/data:/workspace/data
+    command: sh -c 'python src/main.py; exec sleep infinity'
+    restart: unless-stopped

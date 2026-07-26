@@ -1,0 +1,33 @@
+@AndroidEntryPoint
+class MainActivity : AppCompatActivity() {
+
+    @Inject lateinit var locationService: LocationService
+    @Inject lateinit var messageSender: MessageSender
+    @Inject lateinit var settingsRepository: SettingsRepository
+    @Inject lateinit var dialogController: DialogController
+    @Inject lateinit var premiumManager: PremiumManager
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // No UI layout - minimalistic launcher behavior
+        lifecycleScope.launch {
+            sendLocationAndHandleDialog()
+        }
+    }
+
+    private suspend fun sendLocationAndHandleDialog() {
+        val settings = settingsRepository.getSettings()
+        val locationResult = locationService.getCurrentLocation()
+        
+        locationResult.onSuccess { location ->
+            val contacts = // load selected contacts from repo
+            val message = settings.messageTemplate.replacePlaceholders(location)
+            messageSender.sendMessage(contacts, message, location)
+            
+            if (settings.showDialogAfterSend && !settings.isPremium) {
+                dialogController.showPostSendDialog(this, location)
+            }
+        }
+        finish() // always finish after action (silent or after dialog)
+    }
+}

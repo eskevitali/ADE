@@ -1,0 +1,5 @@
+@AndroidEntryPoint
+class SettingsActivity : AppCompatActivity() {
+    // ... UI with switches
+    // showDialogAfterSend & disableAds only enabled when premiumManager.isPremium()
+}

@@ -1,0 +1,41 @@
+struct FlowerButton: View {
+    let title: String
+    let action: () -> Void
+    
+    @State private var isPressed = false
+    @State private var isBloomAnimating = false
+    
+    var body: some View {
+        Button(action: {
+            withAnimation(.easeInOut(duration: DesignConstants.bloomDuration)) {
+                isBloomAnimating = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + DesignConstants.bloomDuration) {
+                withAnimation(.easeInOut(duration: DesignConstants.bloomDuration)) {
+                    isBloomAnimating = false
+                }
+            }
+            action()
+        }) {
+            Text(title)
+                .font(DesignConstants.primaryButtonFont)
+                .foregroundColor(.white)
+                .frame(width: DesignConstants.primaryButtonSize, height: DesignConstants.primaryButtonSize)
+                .background(
+                    FlowerShape()
+                        .fill(DesignConstants.primaryGradient)
+                        .shadow(
+                            color: DesignConstants.primaryButtonShadow.color,
+                            radius: DesignConstants.primaryButtonShadow.radius,
+                            x: DesignConstants.primaryButtonShadow.x,
+                            y: DesignConstants.primaryButtonShadow.y
+                        )
+                )
+                .scaleEffect(isPressed ? 0.95 : (isBloomAnimating ? DesignConstants.bloomScale : 1.0))
+        }
+        .buttonStyle(PlainButtonStyle())
+        .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity, pressing: { pressing in
+            withAnimation(.easeInOut(duration: 0.1)) { isPressed = pressing }
+        }, perform: {})
+    }
+}

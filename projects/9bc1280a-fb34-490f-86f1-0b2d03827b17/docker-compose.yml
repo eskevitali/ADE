@@ -1,0 +1,16 @@
+# ADI workspace — Я ТУТ v3 V2
+services:
+  workspace:
+    image: python:3.12-slim
+    container_name: ade-adi-9bc1280a-fb34-490f-86f1-0b2d03827b17-workspace
+    working_dir: /workspace
+    volumes:
+      - /root/ADE-V4/projects/9bc1280a-fb34-490f-86f1-0b2d03827b17/src:/workspace/src
+      - /root/ADE-V4/projects/9bc1280a-fb34-490f-86f1-0b2d03827b17/data:/workspace/data
+    command: sleep infinity
+    restart: unless-stopped
+
+networks:
+  adi_net:
+    external: true
+    name: ade-adi-9bc1280a-fb34-490f-86f1-0b2d03827b17

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Timer Deploy — Симулятор таймера</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(ellipse at top, #1e1b4b, #0b0f19); font-family: system-ui, sans-serif; color: #e5e7eb; }
+    .panel { width: min(480px, 96vw); padding: 28px; border-radius: 20px;
+      background: rgba(17,24,39,.92); border: 1px solid rgba(99,102,241,.35); box-shadow: 0 20px 60px rgba(0,0,0,.45); }
+    h1 { margin: 0 0 6px; font-size: 1.1rem; color: #a5b4fc; font-weight: 600; }
+    .clock { font-size: 3.5rem; font-weight: 700; letter-spacing: 0.06em; text-align: center;
+      margin: 20px 0; font-variant-numeric: tabular-nums; color: #f9fafb;
+      text-shadow: 0 0 30px rgba(99,102,241,.5); }
+    .vars { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0; font-size: 13px; }
+    .var { background: #111827; border-radius: 10px; padding: 10px 12px; }
+    .var span { display: block; color: #9ca3af; font-size: 11px; margin-bottom: 4px; }
+    .var strong { color: #c4b5fd; font-family: ui-monospace, monospace; }
+    label { display: block; font-size: 12px; color: #9ca3af; margin-bottom: 6px; }
+    input[type=range] { width: 100%; accent-color: #6366f1; }
+    .speed-presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 18px; }
+    .speed-presets button { flex: 1; min-width: 70px; padding: 8px 10px; border: 1px solid #374151;
+      border-radius: 10px; background: #1f2937; color: #e5e7eb; cursor: pointer; font-size: 13px; }
+    .speed-presets button.active { border-color: #6366f1; background: #312e81; color: #e0e7ff; }
+    .controls { display: flex; gap: 10px; }
+    .controls button { flex: 1; padding: 12px; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; }
+    .btn-start { background: linear-gradient(135deg, #10b981, #059669); color: white; }
+    .btn-pause { background: #374151; color: #e5e7eb; }
+    .btn-reset { background: #4c1d95; color: #ede9fe; }
+    .hint { margin-top: 16px; font-size: 12px; color: #6b7280; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h1>Timer Deploy</h1>
+    <p style="margin:0;color:#9ca3af;font-size:13px">Симулятор таймера — переменные меняют ход часов</p>
+    <div class="clock" id="clock">12:00:00</div>
+    <div class="vars">
+      <div class="var"><span>speed_multiplier</span><strong id="v-speed">1.0</strong></div>
+      <div class="var"><span>current_time (сек)</span><strong id="v-time">43200</strong></div>
+      <div class="var"><span>tick_count</span><strong id="v-ticks">0</strong></div>
+      <div class="var"><span>is_running</span><strong id="v-running">false</strong></div>
+    </div>
+    <label>Скорость симуляции (speed_multiplier)</label>
+    <input type="range" id="speed-slider" min="-10" max="50" step="0.1" value="1">
+    <div class="speed-presets">
+      <button type="button" data-speed="0.1">0.1×</button>
+      <button type="button" data-speed="1" class="active">1×</button>
+      <button type="button" data-speed="10">10×</button>
+      <button type="button" data-speed="-1">−1×</button>
+    </div>
+    <div class="controls">
+      <button type="button" class="btn-start" id="btn-start">Старт</button>
+      <button type="button" class="btn-pause" id="btn-pause">Пауза</button>
+      <button type="button" class="btn-reset" id="btn-reset">Сброс 12:00</button>
+    </div>
+    <p class="hint">Измените <code>speed_multiplier</code> во время работы — часы ускорятся, замедлятся или пойдут назад. Это и есть демонстрация влияния переменных на симуляцию.</p>
+  </div>
+  <script>
+    const state = {
+      current_time: 12 * 3600,
+      speed_multiplier: 1.0,
+      is_running: false,
+      paused: false,
+      tick_count: 0,
+      last_ts: null,
+    };
+    const el = (id) => document.getElementById(id);
+    function formatTime(sec) {
+      sec = ((sec % 86400) + 86400) % 86400;
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = Math.floor(sec % 60);
+      return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
+    }
+    function render() {
+      el("clock").textContent = formatTime(state.current_time);
+      el("v-speed").textContent = state.speed_multiplier.toFixed(1);
+      el("v-time").textContent = Math.floor(state.current_time);
+      el("v-ticks").textContent = state.tick_count;
+      el("v-running").textContent = state.is_running && !state.paused ? "true" : "false";
+    }
+    function setSpeed(v) {
+      state.speed_multiplier = v;
+      el("speed-slider").value = v;
+      document.querySelectorAll(".speed-presets button").forEach((b) => {
+        b.classList.toggle("active", parseFloat(b.dataset.speed) === v);
+      });
+      render();
+    }
+    function tick(ts) {
+      if (!state.is_running || state.paused) { state.last_ts = ts; return; }
+      if (state.last_ts != null) {
+        const dt = (ts - state.last_ts) / 1000;
+        state.current_time += dt * state.speed_multiplier;
+        state.tick_count += 1;
+      }
+      state.last_ts = ts;
+      render();
+      requestAnimationFrame(tick);
+    }
+    el("speed-slider").addEventListener("input", (e) => setSpeed(parseFloat(e.target.value)));
+    document.querySelectorAll(".speed-presets button").forEach((b) => {
+      b.addEventListener("click", () => setSpeed(parseFloat(b.dataset.speed)));
+    });
+    el("btn-start").addEventListener("click", () => {
+      state.is_running = true; state.paused = false; state.last_ts = null;
+      render(); requestAnimationFrame(tick);
+    });
+    el("btn-pause").addEventListener("click", () => { state.paused = !state.paused; render(); });
+    el("btn-reset").addEventListener("click", () => {
+      state.current_time = 12 * 3600; state.tick_count = 0; state.last_ts = null; render();
+    });
+    render();
+  </script>
+</body>
+</html>

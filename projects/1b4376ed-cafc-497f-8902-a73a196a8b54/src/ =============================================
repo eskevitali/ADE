@@ -1,0 +1,117 @@
+// DATA MODELS (domain/model package)
+// =============================================
+
+package com.locationquick.domain.model
+
+data class LocationData(
+    val latitude: Double,
+    val longitude: Double,
+    val accuracy: Float,
+    val timestamp: Long,
+    val address: String? = null,
+    val provider: String
+)
+
+data class Contact(
+    val id: String,
+    val name: String,
+    val phoneNumber: String? = null,
+    val email: String? = null,
+    val isSelected: Boolean = false
+)
+
+data class MessageTemplate(
+    val id: String,
+    val text: String,
+    val isDefault: Boolean = false,
+    val language: String
+)
+
+enum class SendMethod {
+    SMS, EMAIL, WHATSAPP, TELEGRAM, MESSENGER
+}
+
+data class AppSettings(
+    val selectedContacts: List<String> = emptyList(),
+    val sendMethod: SendMethod = SendMethod.SMS,
+    val messageTemplate: String = "",
+    val isShakeEnabled: Boolean = true,
+    val isPremium: Boolean = false,
+    val showDialog: Boolean = true,
+    val language: String = "en"
+)
+
+// =============================================
+// INTERFACES (domain/interfaces package)
+// =============================================
+
+package com.locationquick.domain.interfaces
+
+import android.app.Activity
+import com.google.android.gms.ads.AdView
+import com.locationquick.domain.model.Contact
+import com.locationquick.domain.model.LocationData
+import com.locationquick.domain.model.AppSettings
+
+interface LocationService {
+    suspend fun getCurrentLocation(): Result<LocationData>
+    fun startLocationUpdates()
+    fun stopLocationUpdates()
+    fun isLocationEnabled(): Boolean
+}
+
+interface MessageSender {
+    suspend fun sendMessage(
+        contacts: List<Contact>,
+        message: String,
+        location: LocationData
+    ): Result<Boolean>
+}
+
+interface AdManager {
+    fun loadBannerAd(adView: AdView)
+    fun showInterstitialAd(activity: Activity, onClosed: () -> Unit)
+    fun isAdLoaded(): Boolean
+}
+
+interface SettingsRepository {
+    suspend fun getSettings(): AppSettings
+    suspend fun updateSettings(settings: AppSettings)
+    suspend fun isPremiumUser(): Boolean
+}
+
+// =============================================
+// ROOM ENTITIES (data/local package)
+// =============================================
+
+package com.locationquick.data.local.entity
+
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+@Entity(tableName = "contacts")
+data class ContactEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val phoneNumber: String?,
+    val email: String?,
+    val isSelected: Boolean = false
+)
+
+@Entity(tableName = "message_templates")
+data class MessageTemplateEntity(
+    @PrimaryKey val id: String,
+    val text: String,
+    val isDefault: Boolean = false,
+    val language: String
+)
+
+@Entity(tableName = "location_history")
+data class LocationHistoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val latitude: Double,
+    val longitude: Double,
+    val timestamp: Long,
+    val method: String,
+    val success: Boolean
+)

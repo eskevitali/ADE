@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — ADE v4{% endblock %}
+{% block content %}
+<div class="mb-8">
+  <h1 class="text-3xl font-bold text-white mb-2">Dashboard</h1>
+  <p class="text-gray-400">Autonomous Development Environment — управление ADI-проектами</p>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+  <a href="/team" class="glass rounded-xl p-5 hover:border-indigo-500/40 border border-transparent transition block group">
+    <div class="text-sm text-gray-400">Команда агентов</div>
+    <div class="text-3xl font-bold text-indigo-300">{{ team_count }}</div>
+    <div class="text-xs text-gray-500 mt-1 group-hover:text-indigo-400 transition">Настроить модели и промпты →</div>
+  </a>
+  <div class="glass rounded-xl p-5">
+    <div class="text-sm text-gray-400">ADI проектов</div>
+    <div class="text-3xl font-bold text-indigo-300">{{ project_count }}</div>
+  </div>
+  <div class="glass rounded-xl p-5">
+    <div class="text-sm text-gray-400">Задач</div>
+    <div class="text-3xl font-bold text-indigo-300">{{ task_count }}</div>
+  </div>
+  <div class="glass rounded-xl p-5">
+    <div class="text-sm text-gray-400">Статус</div>
+    <div class="text-3xl font-bold text-emerald-400">{{ health }}</div>
+  </div>
+</div>
+
+{% if projects %}
+<div class="mb-8">
+  <h2 class="text-xl font-semibold mb-4">ADI проекты</h2>
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for project in projects %}
+    <div class="glass rounded-xl p-4 border border-indigo-500/10 hover:border-indigo-500/40 transition flex flex-col"
+      data-project-card="{{ project.id }}" data-acceptance="{{ project.acceptance_status }}"
+      data-project-name="{{ project.name }}">
+      <a href="/projects/{{ project.id }}" class="flex-1 block group mb-3">
+        <div class="font-semibold text-white mb-1 group-hover:text-indigo-300 transition">{{ project.name }}</div>
+        <div class="text-xs font-mono text-gray-500 mb-2">{{ project.id[:8] }}…</div>
+        <p class="text-sm text-gray-400 line-clamp-2 mb-3">{{ project.idea[:100] }}{% if project.idea|length > 100 %}…{% endif %}</p>
+        <div class="flex items-center justify-between text-xs">
+          <span class="px-2 py-1 rounded-full
+            {% if project.status == 'completed' %}bg-emerald-900/50 text-emerald-300
+            {% elif project.status == 'ready' %}bg-gray-800 text-gray-400
+            {% else %}bg-amber-900/50 text-amber-300{% endif %}">
+            {{ project.status }}
+          </span>
+          <span class="text-gray-600 group-hover:text-indigo-400 transition">Открыть →</span>
+        </div>
+      </a>
+      {% if project.status == 'completed' %}
+      <div class="flex gap-2 pt-2 border-t border-indigo-500/10" onclick="event.stopPropagation()">
+        <button type="button" class="btn-accept-card flex-1 text-xs py-1.5 rounded-lg font-medium transition
+          {% if project.acceptance_status == 'accepted' %}bg-gray-800 text-gray-500{% else %}bg-emerald-800/60 hover:bg-emerald-700/60 text-emerald-200{% endif %}"
+          data-id="{{ project.id }}"
+          {% if project.acceptance_status == 'accepted' %}disabled{% endif %}>
+          {% if project.acceptance_status == 'accepted' %}Принято{% else %}Принять{% endif %}
+        </button>
+        <a href="/projects/{{ project.id }}#reflection-panel"
+          class="flex-1 text-center text-xs py-1.5 rounded-lg bg-indigo-800/60 hover:bg-indigo-700/60 text-indigo-200 font-medium">
+          Доработать
+        </a>
+      </div>
+      {% endif %}
+      <div class="flex gap-2 pt-2 mt-2 border-t border-indigo-500/10" onclick="event.stopPropagation()">
+        <button type="button" class="btn-duplicate-card flex-1 text-xs py-1.5 rounded-lg font-medium
+          bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 transition"
+          data-id="{{ project.id }}" data-name="{{ project.name }}">
+          Дубликат
+        </button>
+        <button type="button" class="btn-delete-card flex-1 text-xs py-1.5 rounded-lg font-medium
+          bg-red-950/40 hover:bg-red-900/50 text-red-300/90 transition"
+          data-id="{{ project.id }}" data-name="{{ project.name }}">
+          Удалить
+        </button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="flex justify-between items-center mb-4">
+  <h2 class="text-xl font-semibold">Последние задачи</h2>
+  <a href="/projects/new" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg text-sm font-medium transition">+ New Project</a>
+</div>
+
+<div class="glass rounded-xl overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-indigo-950/50 text-gray-400">
+      <tr>
+        <th class="text-left px-4 py-3">ID</th>
+        <th class="text-left px-4 py-3">Задача</th>
+        <th class="text-left px-4 py-3">Статус</th>
+        <th class="text-left px-4 py-3">Действие</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for task in tasks %}
+      <tr class="border-t border-indigo-500/10 hover:bg-indigo-950/30">
+        <td class="px-4 py-3 font-mono text-xs text-gray-500">{{ task.id[:8] }}…</td>
+        <td class="px-4 py-3">{{ task.summary }}</td>
+        <td class="px-4 py-3">
+          <span class="px-2 py-1 rounded-full text-xs
+            {% if task.status == 'completed' %}bg-emerald-900/50 text-emerald-300
+            {% elif task.status == 'failed' %}bg-red-900/50 text-red-300
+            {% elif task.status == 'running' %}bg-amber-900/50 text-amber-300
+            {% elif task.status == 'awaiting_approval' %}bg-purple-900/50 text-purple-300
+            {% else %}bg-gray-800 text-gray-400{% endif %}">
+            {{ task.status }}
+          </span>
+        </td>
+        <td class="px-4 py-3">
+          <a href="/workflow/{{ task.id }}" class="text-indigo-400 hover:text-indigo-300">View →</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">Нет задач. <a href="/projects/new" class="text-indigo-400">Создать проект</a></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="mt-8 text-center">
+  <a href="/team" class="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 text-sm transition">
+    Команда агентов — модели, промпты, статус →
+  </a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.querySelectorAll(".btn-duplicate-card").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const name = btn.dataset.name;
+      if (!confirm(`Создать дубликат «${name}» для следующей версии?\nИсходный проект останется без изменений.`)) {
+        return;
+      }
+      btn.disabled = true;
+      const prev = btn.textContent;
+      btn.textContent = "Копирование…";
+      try {
+        const res = await fetch(`/api/projects/${id}/duplicate`, { method: "POST" });
+        const data = await res.json();
+        if (data.status === "ok" && data.redirect_url) {
+          window.location.href = data.redirect_url;
+          return;
+        }
+        alert(data.message || data.detail || "Не удалось создать дубликат");
+      } catch (err) {
+        alert(`Ошибка: ${err}`);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = prev;
+      }
+    });
+  });
+
+  document.querySelectorAll(".btn-delete-card").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const name = btn.dataset.name;
+      const elig = await fetch(`/api/projects/${id}/delete-eligibility`).then((r) => r.json());
+      if (!elig.can_delete) {
+        const reasons = {
+          rebuild_in_progress: "Идёт пересборка после доработки",
+          processing_in_progress: "Architect обрабатывает доработку",
+          pending_revision_review: "Сначала утвердите или отмените просмотр доработки",
+          workflow_in_progress: "Workflow ещё выполняется",
+        };
+        alert(reasons[elig.block_reason] || elig.block_reason || "Удаление сейчас недоступно");
+        return;
+      }
+      const typed = prompt(`Удалить проект «${name}» безвозвратно?\nВведите название для подтверждения:`);
+      if (typed === null || typed.trim() !== name.trim()) return;
+      btn.disabled = true;
+      btn.textContent = "Удаление…";
+      const res = await fetch(`/api/projects/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm_name: typed.trim() }),
+      });
+      const data = await res.json();
+      if (data.status === "ok") {
+        document.querySelector(`[data-project-card="${id}"]`)?.remove();
+      } else {
+        alert(data.message || "Ошибка удаления");
+        btn.disabled = false;
+        btn.textContent = "Удалить проект";
+      }
+    });
+  });
+
+  document.querySelectorAll(".btn-accept-card").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (btn.disabled) return;
+      const id = btn.dataset.id;
+      const res = await fetch(`/api/projects/${id}/accept`, { method: "POST" });
+      const data = await res.json();
+      if (data.status === "ok") {
+        btn.textContent = "Принято";
+        btn.disabled = true;
+        btn.className = "btn-accept-card flex-1 text-xs py-1.5 rounded-lg font-medium bg-gray-800 text-gray-500";
+        const card = document.querySelector(`[data-project-card="${id}"]`);
+        if (card) card.dataset.acceptance = "accepted";
+      }
+    });
+  });
+</script>
+{% endblock %}

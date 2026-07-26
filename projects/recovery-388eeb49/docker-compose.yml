@@ -1,0 +1,11 @@
+# ADI workspace — Recovery Test
+services:
+  workspace:
+    image: python:3.12-slim
+    container_name: ade-adi-recovery-388eeb49-workspace
+    working_dir: /workspace
+    volumes:
+      - /root/ADE-V4/projects/recovery-388eeb49/src:/workspace/src
+      - /root/ADE-V4/projects/recovery-388eeb49/data:/workspace/data
+    command: sleep infinity
+    restart: unless-stopped

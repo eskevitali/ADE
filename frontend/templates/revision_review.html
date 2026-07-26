@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Доработка #{{ revision.id }} — {{ project.name }}{% endblock %}
+{% block head %}
+<style>
+  .change-modified { border-left: 4px solid #f59e0b; background: rgba(245,158,11,0.08); }
+  .change-added { border-left: 4px solid #10b981; background: rgba(16,185,129,0.08); }
+  .change-removed { border-left: 4px solid #ef4444; background: rgba(239,68,68,0.08); }
+  .change-unchanged { border-left: 4px solid #374151; opacity: 0.7; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="/projects/{{ project.id }}" class="text-indigo-400 hover:text-indigo-300 text-sm">← {{ project.name }}</a>
+  <h1 class="text-2xl font-bold text-white mt-2">Просмотр доработки #{{ revision.id }}</h1>
+  <p class="text-gray-400 text-sm mt-1">Сравнение изменений в ТЗ и Spec после вашей обратной связи</p>
+</div>
+
+<div class="glass rounded-xl p-5 mb-6 border border-amber-500/30">
+  <h2 class="font-semibold text-amber-200 mb-2">Ваш запрос на доработку</h2>
+  <p class="text-gray-300 whitespace-pre-wrap">{{ revision.feedback }}</p>
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+  <div class="glass rounded-lg p-3 text-center">
+    <div class="text-2xl font-bold text-amber-300">{{ revision.summary.modified }}</div>
+    <div class="text-xs text-gray-500">изменено</div>
+  </div>
+  <div class="glass rounded-lg p-3 text-center">
+    <div class="text-2xl font-bold text-emerald-300">{{ revision.summary.added }}</div>
+    <div class="text-xs text-gray-500">добавлено</div>
+  </div>
+  <div class="glass rounded-lg p-3 text-center">
+    <div class="text-2xl font-bold text-red-300">{{ revision.summary.removed }}</div>
+    <div class="text-xs text-gray-500">удалено</div>
+  </div>
+  <div class="glass rounded-lg p-3 text-center">
+    <div class="text-2xl font-bold text-gray-500">{{ revision.summary.unchanged }}</div>
+    <div class="text-xs text-gray-500">без изменений</div>
+  </div>
+</div>
+
+<div class="flex gap-2 mb-4">
+  <button type="button" id="tab-tz" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white">ТЗ</button>
+  <button type="button" id="tab-spec" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium bg-gray-800 text-gray-400">Spec</button>
+</div>
+
+<div id="panel-tz" class="space-y-3 mb-8">
+  <h2 class="text-lg font-semibold text-indigo-300">Техническое задание</h2>
+  <p class="text-xs text-gray-500 mb-2">
+    <span class="inline-block w-3 h-3 bg-amber-500/50 rounded mr-1"></span> изменено &nbsp;
+    <span class="inline-block w-3 h-3 bg-emerald-500/50 rounded mr-1"></span> добавлено &nbsp;
+    <span class="inline-block w-3 h-3 bg-red-500/50 rounded mr-1"></span> удалено
+  </p>
+  {% for section in revision.tz_sections %}
+  <details class="glass rounded-xl overflow-hidden change-{{ section.change }}" {{ 'open' if section.change != 'unchanged' else '' }}>
+    <summary class="px-4 py-3 cursor-pointer flex items-center justify-between hover:bg-indigo-950/30">
+      <span class="font-medium text-white">{{ section.title }}</span>
+      <span class="text-xs px-2 py-0.5 rounded-full
+        {% if section.change == 'modified' %}bg-amber-900/50 text-amber-300
+        {% elif section.change == 'added' %}bg-emerald-900/50 text-emerald-300
+        {% elif section.change == 'removed' %}bg-red-900/50 text-red-300
+        {% else %}bg-gray-800 text-gray-500{% endif %}">
+        {% if section.change == 'modified' %}Изменено
+        {% elif section.change == 'added' %}Добавлено
+        {% elif section.change == 'removed' %}Удалено
+        {% else %}Без изменений{% endif %}
+      </span>
+    </summary>
+    <div class="px-4 pb-4 text-sm font-mono">{{ section.diff_html | safe }}</div>
+  </details>
+  {% endfor %}
+</div>
+
+<div id="panel-spec" class="space-y-3 mb-8 hidden">
+  <h2 class="text-lg font-semibold text-indigo-300">Спецификация</h2>
+  {% for section in revision.spec_sections %}
+  <details class="glass rounded-xl overflow-hidden change-{{ section.change }}" {{ 'open' if section.change != 'unchanged' else '' }}>
+    <summary class="px-4 py-3 cursor-pointer flex items-center justify-between hover:bg-indigo-950/30">
+      <span class="font-medium text-white">{{ section.title }}</span>
+      <span class="text-xs px-2 py-0.5 rounded-full
+        {% if section.change == 'modified' %}bg-amber-900/50 text-amber-300
+        {% elif section.change == 'added' %}bg-emerald-900/50 text-emerald-300
+        {% elif section.change == 'removed' %}bg-red-900/50 text-red-300
+        {% else %}bg-gray-800 text-gray-500{% endif %}">
+        {% if section.change == 'modified' %}Изменено
+        {% elif section.change == 'added' %}Добавлено
+        {% elif section.change == 'removed' %}Удалено
+        {% else %}Без изменений{% endif %}
+      </span>
+    </summary>
+    <div class="px-4 pb-4 text-sm font-mono">{{ section.diff_html | safe }}</div>
+  </details>
+  {% endfor %}
+</div>
+
+<div id="confirm-progress" class="hidden mb-6"></div>
+
+<div class="glass rounded-xl p-5 border border-indigo-500/20 sticky bottom-4">
+  <p class="text-sm text-gray-400 mb-4">Утвердите изменения — после этого автоматически запустятся пересборка кода, обновление превью и деплой (docker compose).</p>
+  <div class="flex flex-wrap gap-3">
+    <button id="btn-confirm" type="button"
+      class="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-lg text-sm font-medium">
+      Утвердить доработку
+    </button>
+    <a href="/projects/{{ project.id }}#reflection-panel"
+      class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg text-sm font-medium inline-block">
+      Доработать ещё
+    </a>
+    <a href="/projects/{{ project.id }}"
+      class="text-gray-400 hover:text-gray-300 px-4 py-2.5 text-sm">
+      К проекту
+    </a>
+  </div>
+  <p id="confirm-status" class="text-sm text-gray-500 mt-2"></p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const projectId = "{{ project.id }}";
+  const revisionId = {{ revision.id }};
+
+  document.getElementById("tab-tz").addEventListener("click", () => {
+    document.getElementById("panel-tz").classList.remove("hidden");
+    document.getElementById("panel-spec").classList.add("hidden");
+    document.getElementById("tab-tz").className = "tab-btn px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white";
+    document.getElementById("tab-spec").className = "tab-btn px-4 py-2 rounded-lg text-sm font-medium bg-gray-800 text-gray-400";
+  });
+  document.getElementById("tab-spec").addEventListener("click", () => {
+    document.getElementById("panel-spec").classList.remove("hidden");
+    document.getElementById("panel-tz").classList.add("hidden");
+    document.getElementById("tab-spec").className = "tab-btn px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white";
+    document.getElementById("tab-tz").className = "tab-btn px-4 py-2 rounded-lg text-sm font-medium bg-gray-800 text-gray-400";
+  });
+
+  document.getElementById("btn-confirm").addEventListener("click", async () => {
+    const btn = document.getElementById("btn-confirm");
+    const el = document.getElementById("confirm-status");
+    btn.disabled = true;
+    const wrap = document.getElementById("confirm-progress");
+    wrap.classList.remove("hidden");
+    const progress = new PipelineProgress(wrap, window.ADE_PIPELINES.rebuild);
+    progress.setByKey("queued", "Утверждение доработки…");
+    const res = await fetch(`/api/projects/${projectId}/revision/${revisionId}/confirm`, { method: "POST" });
+    const data = await res.json();
+    if (data.status === "ok") {
+      progress.setByKey("coder", "Запущена пересборка…");
+      el.textContent = data.message || "Доработка утверждена. Пересборка…";
+      window.location.href = data.redirect_url || `/projects/${projectId}?rebuild=1#reflection-panel`;
+    } else {
+      progress.fail(data.message || "Ошибка");
+      el.textContent = data.message || "Ошибка";
+      btn.disabled = false;
+    }
+  });
+</script>
+{% endblock %}

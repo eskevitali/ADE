@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+{% block title %}Workflow — ADE v4{% endblock %}
+{% block head %}
+<style>
+  .log-entry { animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+  .section-content { max-height: 0; overflow: hidden; transition: max-height 0.25s ease; }
+  .section-content.open { max-height: 800px; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="/dashboard" class="text-indigo-400 hover:text-indigo-300 text-sm">← Dashboard</a>
+  <h1 class="text-2xl font-bold text-white mt-2">Live Workflow</h1>
+  <p class="text-gray-400 text-sm font-mono">{{ task_id }}</p>
+  {% if project_id %}
+  <p class="text-gray-500 text-sm mt-1">
+    ADI: <a href="/projects/{{ project_id }}" class="text-indigo-300 hover:text-indigo-200">{{ project_name or project_id[:8] }}</a>
+    · <span class="font-mono">{{ project_id[:8] }}…</span>
+  </p>
+  {% endif %}
+</div>
+
+<div id="workflow-progress" class="mb-6"></div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+  <div class="glass rounded-xl p-4 lg:col-span-2">
+    <h2 class="font-semibold mb-2">Задача</h2>
+    <p class="text-gray-300">{{ task_text }}</p>
+  </div>
+  <div class="glass rounded-xl p-4">
+    <h2 class="font-semibold mb-2">Статус</h2>
+    <div id="status-badge" class="text-2xl font-bold text-amber-300">{{ status }}</div>
+    <div id="phase" class="text-sm text-gray-500 mt-1">phase: {{ phase }}</div>
+  </div>
+</div>
+
+<!-- Idea discussion -->
+<div id="discussion-panel" class="glass rounded-xl p-4 mb-4 hidden border border-indigo-500/30">
+  <h2 class="font-semibold mb-2 text-indigo-300">Обсуждение идеи</h2>
+  <p class="text-sm text-gray-400 mb-3">Уточните требования с Architect. Когда готовы — утвердите идею для формирования ТЗ.</p>
+  <div id="discussion-log" class="space-y-2 max-h-64 overflow-y-auto mb-3 text-sm">
+    {% for msg in discussion %}
+    <div class="rounded-lg p-2 {{ 'bg-indigo-950/50' if msg.role == 'architect' else 'bg-gray-900/50' }}">
+      <span class="text-xs text-gray-500">{{ 'Architect' if msg.role == 'architect' else 'Вы' }}</span>
+      <p class="text-gray-300 whitespace-pre-wrap mt-1">{{ msg.content }}</p>
+    </div>
+    {% endfor %}
+  </div>
+  <form id="discuss-form" class="flex gap-2">
+    <input type="text" id="discuss-input" placeholder="Ваш вопрос или уточнение…"
+      class="flex-1 bg-gray-900/80 border border-indigo-500/30 rounded-lg px-3 py-2 text-white text-sm">
+    <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg text-sm">Отправить</button>
+  </form>
+</div>
+
+<!-- TZ / Spec review with sections -->
+<div id="document-panel" class="glass rounded-xl p-4 mb-4 hidden border border-purple-500/30">
+  <h2 id="document-title" class="font-semibold mb-2 text-purple-300">Проверка документа</h2>
+  <p class="text-sm text-gray-400 mb-4">Кликните на пункт — обсудите и отредактируйте через диалог. Затем утвердите или отклоните.</p>
+  <div id="sections-list" class="space-y-2 mb-4"></div>
+</div>
+
+<div id="approval-panel" class="glass rounded-xl p-4 mb-4 hidden border border-purple-500/30">
+  <h2 class="font-semibold mb-2 text-purple-300">Human-in-the-loop</h2>
+  <p id="approval-text" class="text-sm text-gray-400 mb-4">Ожидание подтверждения…</p>
+  <div class="flex flex-wrap gap-3">
+    <button id="btn-approve" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg text-sm font-medium transition">Утвердить</button>
+    <button id="btn-reject" class="bg-red-700 hover:bg-red-600 px-4 py-2 rounded-lg text-sm font-medium transition">Отклонить</button>
+  </div>
+</div>
+
+<!-- Deliverable -->
+<div id="deliverable-panel" class="glass rounded-xl p-4 mb-4 hidden border border-emerald-500/30">
+  <h2 class="font-semibold mb-2 text-emerald-300">Результат</h2>
+  <p id="deliverable-type" class="text-sm text-gray-400 mb-3"></p>
+  <div id="deliverable-links" class="flex flex-wrap gap-2 mb-3"></div>
+  <pre id="deliverable-instructions" class="text-sm text-gray-400 whitespace-pre-wrap"></pre>
+  <div id="simulator-commands" class="mt-3 space-y-2 hidden"></div>
+</div>
+
+<div class="glass rounded-xl p-4">
+  <h2 class="font-semibold mb-3">Live Log <span class="text-xs text-gray-500">(WebSocket)</span></h2>
+  <div id="log" class="space-y-2 max-h-96 overflow-y-auto font-mono text-sm">
+    <div class="text-gray-500">Подключение к WebSocket…</div>
+  </div>
+</div>
+
+<div id="results" class="mt-4 space-y-4 hidden">
+  <div class="glass rounded-xl p-4"><h3 class="font-semibold text-indigo-300 mb-2">Spec</h3><pre id="spec" class="text-sm text-gray-300 whitespace-pre-wrap"></pre></div>
+  <div class="glass rounded-xl p-4"><h3 class="font-semibold text-indigo-300 mb-2">Code</h3><pre id="code" class="text-sm text-gray-300 whitespace-pre-wrap"></pre></div>
+  <div class="glass rounded-xl p-4"><h3 class="font-semibold text-indigo-300 mb-2">Review</h3><pre id="review" class="text-sm text-gray-300 whitespace-pre-wrap"></pre></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const taskId = "{{ task_id }}";
+  const humanInLoop = {{ "true" if human_in_loop else "false" }};
+  const initialGate = "{{ pending_gate }}";
+  const logEl = document.getElementById("log");
+  const statusEl = document.getElementById("status-badge");
+  const phaseEl = document.getElementById("phase");
+  const approvalPanel = document.getElementById("approval-panel");
+  const approvalText = document.getElementById("approval-text");
+  const discussionPanel = document.getElementById("discussion-panel");
+  const documentPanel = document.getElementById("document-panel");
+  const deliverablePanel = document.getElementById("deliverable-panel");
+  let currentGate = initialGate || "";
+  const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new WebSocket(`${wsProto}//${location.host}/ws`);
+
+  const GATE_LABELS = {
+    idea: "Идея (обсуждение)",
+    tz: "Техническое задание (ТЗ)",
+    spec: "Спецификация (Spec)",
+    code: "Код (Code)",
+  };
+
+  const workflowProgress = new PipelineProgress("workflow-progress", window.ADE_PIPELINES.workflow);
+  workflowProgress.show();
+  workflowProgress.setByKey("idea", "Запуск workflow…");
+
+  const PHASE_TO_STEP = {
+    idea: "idea", idea_discussion: "idea",
+    tz: "tz", spec: "spec", code: "code", review: "review",
+  };
+  const GATE_TO_STEP = { idea: "idea", tz: "tz", spec: "spec", code: "code" };
+  const STEP_LABELS = {
+    idea: "Architect формирует ТЗ…",
+    tz: "Architect пишет Spec…",
+    spec: "Coder генерирует код…",
+    code: "Reviewer проверяет…",
+    review: "Сборка результата…",
+    deliverable: "Готово",
+  };
+
+  function updateWorkflowProgress(phaseOrGate, customLabel) {
+    const key = PHASE_TO_STEP[phaseOrGate] || GATE_TO_STEP[phaseOrGate] || phaseOrGate;
+    if (key === "deliverable") workflowProgress.complete("Результат готов");
+    else workflowProgress.setByKey(key, customLabel || STEP_LABELS[key] || "Обработка…");
+  }
+
+  function addLog(text, cls = "text-gray-300") {
+    const div = document.createElement("div");
+    div.className = `log-entry ${cls}`;
+    div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function appendDiscussion(role, content) {
+    const log = document.getElementById("discussion-log");
+    const div = document.createElement("div");
+    div.className = `rounded-lg p-2 ${role === "architect" ? "bg-indigo-950/50" : "bg-gray-900/50"}`;
+    div.innerHTML = `<span class="text-xs text-gray-500">${role === "architect" ? "Architect" : "Вы"}</span><p class="text-gray-300 whitespace-pre-wrap mt-1"></p>`;
+    div.querySelector("p").textContent = content;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function loadSections(gate) {
+    const res = await fetch(`/api/tasks/${taskId}/sections?gate=${gate}`);
+    const data = await res.json();
+    const list = document.getElementById("sections-list");
+    list.innerHTML = "";
+    (data.sections || []).forEach((section) => {
+      const wrap = document.createElement("div");
+      wrap.className = "border border-indigo-500/20 rounded-lg overflow-hidden";
+      wrap.innerHTML = `
+        <button type="button" class="section-toggle w-full text-left px-4 py-3 hover:bg-indigo-950/30 flex justify-between items-center">
+          <span class="font-medium text-white">${section.title}</span>
+          <span class="text-xs text-indigo-400">править ↓</span>
+        </button>
+        <div class="section-content px-4 pb-4">
+          <pre class="text-sm text-gray-400 whitespace-pre-wrap mb-3 section-body"></pre>
+          <textarea class="revise-comment w-full bg-gray-900/80 border border-indigo-500/30 rounded-lg px-3 py-2 text-white text-sm mb-2" rows="2" placeholder="Что изменить в этом пункте?"></textarea>
+          <button type="button" class="revise-btn bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg text-xs">Применить правку</button>
+        </div>`;
+      wrap.querySelector(".section-body").textContent = section.content;
+      wrap.querySelector(".section-toggle").addEventListener("click", () => {
+        wrap.querySelector(".section-content").classList.toggle("open");
+      });
+      wrap.querySelector(".revise-btn").addEventListener("click", async () => {
+        const comment = wrap.querySelector(".revise-comment").value.trim();
+        if (!comment) return;
+        const r = await fetch(`/api/tasks/${taskId}/revise-section`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ gate, section_id: section.id, comment }),
+        });
+        const d = await r.json();
+        if (d.status === "ok") {
+          addLog(`Revised: ${section.title}`, "text-indigo-300");
+          loadSections(gate);
+        } else {
+          addLog(`Revise error: ${d.message}`, "text-red-400");
+        }
+      });
+      list.appendChild(wrap);
+    });
+  }
+
+  function showDeliverable(d) {
+    if (!d || !d.type) return;
+    deliverablePanel.classList.remove("hidden");
+    document.getElementById("deliverable-type").textContent = d.type_label || d.type;
+    const linksWrap = document.getElementById("deliverable-links");
+    linksWrap.innerHTML = "";
+    const addLink = (href, text, cls) => {
+      const a = document.createElement("a");
+      a.href = href;
+      a.textContent = text;
+      a.className = cls;
+      a.target = "_blank";
+      a.rel = "noopener";
+      linksWrap.appendChild(a);
+    };
+    if (d.preview_url) {
+      addLink(d.preview_url, d.preview_label || "Открыть", "bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded-lg text-sm");
+    }
+    if (d.expo_download_url) {
+      const dl = document.createElement("a");
+      dl.href = d.expo_download_url;
+      dl.textContent = d.expo_download_label || "Создать и скачать ZIP";
+      dl.title = "Соберёт свежий ZIP и начнёт скачивание";
+      dl.className = "bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg text-sm";
+      linksWrap.appendChild(dl);
+    }
+    document.getElementById("deliverable-instructions").textContent = d.instructions || "";
+    const sim = document.getElementById("simulator-commands");
+    if (d.simulator_exports && d.simulator_exports.length) {
+      sim.classList.remove("hidden");
+      sim.innerHTML = "<p class='text-xs text-gray-500 mb-2'>После распаковки ZIP на вашем ПК:</p>" +
+        d.simulator_exports.map((e) =>
+        `<div class="text-xs"><span class="text-gray-500">${e.platform}:</span> <code class="text-indigo-300">${e.command}</code></div>`
+      ).join("");
+    }
+  }
+
+  function showApproval(gate) {
+    if (!humanInLoop) return;
+    currentGate = gate;
+    discussionPanel.classList.add("hidden");
+    documentPanel.classList.add("hidden");
+    approvalPanel.classList.remove("hidden");
+    approvalText.textContent = `Требуется подтверждение: ${GATE_LABELS[gate] || gate}`;
+    statusEl.textContent = "awaiting_approval";
+    statusEl.className = "text-2xl font-bold text-purple-300";
+    workflowProgress.setByKey(GATE_TO_STEP[gate] || gate, `Ожидание вашего решения: ${GATE_LABELS[gate] || gate}`);
+    workflowProgress.setBusy(false);
+
+    if (gate === "idea") {
+      discussionPanel.classList.remove("hidden");
+      approvalText.textContent = "Обсудите идею с Architect, затем утвердите для перехода к ТЗ.";
+    }
+    if (gate === "tz" || gate === "spec") {
+      documentPanel.classList.remove("hidden");
+      document.getElementById("document-title").textContent =
+        gate === "tz" ? "Проверка технического задания" : "Проверка спецификации";
+      loadSections(gate);
+    }
+  }
+
+  function hideApproval() {
+    currentGate = "";
+    approvalPanel.classList.add("hidden");
+    discussionPanel.classList.add("hidden");
+    documentPanel.classList.add("hidden");
+  }
+
+  async function resolveGate(action) {
+    if (!currentGate) return;
+    const endpoint = action === "approve" ? "approve" : "reject";
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gate: currentGate }),
+      });
+      const data = await res.json();
+      if (data.status === "ok") {
+        addLog(`${action === "approve" ? "Утверждено" : "Отклонено"}: ${currentGate}`,
+          action === "approve" ? "text-emerald-400" : "text-red-400");
+        hideApproval();
+      } else {
+        addLog(`Gate error: ${data.message}`, "text-red-400");
+      }
+    } catch (err) {
+      addLog(`Request failed: ${err}`, "text-red-400");
+    }
+  }
+
+  document.getElementById("btn-approve").addEventListener("click", () => resolveGate("approve"));
+  document.getElementById("btn-reject").addEventListener("click", () => resolveGate("reject"));
+
+  document.getElementById("discuss-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = document.getElementById("discuss-input");
+    const msg = input.value.trim();
+    if (!msg) return;
+    appendDiscussion("user", msg);
+    input.value = "";
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/discuss`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg }),
+      });
+      const data = await res.json();
+      if (data.status === "ok") appendDiscussion("architect", data.reply);
+      else addLog(`Discuss error: ${data.message}`, "text-red-400");
+    } catch (err) {
+      addLog(`Discuss failed: ${err}`, "text-red-400");
+    }
+  });
+
+  if (initialGate) showApproval(initialGate);
+  {% if deliverable and deliverable.type %}showDeliverable({{ deliverable | tojson }});{% endif %}
+
+  ws.onopen = () => { addLog("WebSocket connected", "text-emerald-400"); ws.send(JSON.stringify({ subscribe: taskId })); };
+  ws.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.task_id && data.task_id !== taskId) return;
+    switch (data.event) {
+      case "workflow_started":
+        addLog("Workflow started", "text-indigo-300"); statusEl.textContent = "running";
+        updateWorkflowProgress("idea"); break;
+      case "step_completed":
+        addLog(`Step: ${data.node} → ${data.phase}`, "text-indigo-200"); phaseEl.textContent = `phase: ${data.phase}`;
+        updateWorkflowProgress(data.phase || data.node); break;
+      case "document_ready":
+        addLog(`Document ready: ${data.gate}`, "text-indigo-200"); break;
+      case "document_updated":
+        addLog(`Section updated (${data.gate})`, "text-indigo-300");
+        if (currentGate === data.gate) loadSections(data.gate); break;
+      case "discussion_message":
+        appendDiscussion(data.role, data.content); break;
+      case "awaiting_approval":
+        showApproval(data.gate); addLog(`Awaiting: ${data.gate}`, "text-purple-300"); break;
+      case "approval_resolved":
+        hideApproval(); statusEl.textContent = "running"; statusEl.className = "text-2xl font-bold text-amber-300"; break;
+      case "deliverable_ready":
+        showDeliverable(data); addLog("Deliverable ready", "text-emerald-400");
+        workflowProgress.complete("Результат готов"); break;
+      case "workflow_completed":
+        hideApproval();
+        const finalStatus = data.status || "completed";
+        statusEl.textContent = finalStatus;
+        statusEl.className = finalStatus === "completed" ? "text-2xl font-bold text-emerald-400" : "text-2xl font-bold text-amber-300";
+        addLog(`Workflow ${finalStatus}!`, finalStatus === "completed" ? "text-emerald-400" : "text-amber-400");
+        if (finalStatus === "completed") workflowProgress.complete("Workflow завершён");
+        break;
+      case "task_failed":
+        hideApproval();
+        addLog(`Error: ${data.error}`, "text-red-400"); statusEl.textContent = "failed"; statusEl.className = "text-2xl font-bold text-red-400"; break;
+      case "task_completed":
+        if (data.deliverable) showDeliverable(data.deliverable);
+        if (data.spec) {
+          document.getElementById("results").classList.remove("hidden");
+          document.getElementById("spec").textContent = data.spec || "";
+          document.getElementById("code").textContent = data.code || "";
+          document.getElementById("review").textContent = data.review || "";
+        }
+        break;
+    }
+  };
+  ws.onerror = () => addLog("WebSocket error", "text-red-400");
+</script>
+{% endblock %}

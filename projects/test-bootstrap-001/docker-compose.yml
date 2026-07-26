@@ -1,0 +1,22 @@
+# ADI workspace — Test Project
+# mode: python_app
+services:
+  workspace:
+    image: python:3.12-slim
+    container_name: ade-adi-test-bootstrap-001-workspace
+    working_dir: /workspace
+    volumes:
+      - /root/ADE-V4/projects/test-bootstrap-001/src:/workspace/src
+      - /root/ADE-V4/projects/test-bootstrap-001/data:/workspace/data
+    command: python src/main.py
+    restart: unless-stopped
+
+    ports:
+      - "18149:8000"
+    networks:
+      - default
+      - ade_proxy
+networks:
+  ade_proxy:
+    external: true
+    name: ade-v4_default

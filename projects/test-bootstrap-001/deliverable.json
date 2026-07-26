@@ -1,0 +1,9 @@
+{
+  "project_id": "test-bootstrap-001",
+  "project_name": "Test Project",
+  "type": "other",
+  "type_label": "Прочее",
+  "preview_url": "/projects/test-bootstrap-001",
+  "preview_label": "Артефакты проекта",
+  "instructions": "См. spec/, src/ и review/ в каталоге проекта."
+}

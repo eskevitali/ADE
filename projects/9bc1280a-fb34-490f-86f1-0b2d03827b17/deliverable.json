@@ -1,0 +1,28 @@
+{
+  "project_id": "9bc1280a-fb34-490f-86f1-0b2d03827b17",
+  "project_name": "Я ТУТ v3 V2",
+  "type": "mobile",
+  "type_label": "Мобильное приложение",
+  "preview_url": "/preview/9bc1280a-fb34-490f-86f1-0b2d03827b17/mobile",
+  "preview_label": "Симулятор макета (браузер)",
+  "mockup_available": true,
+  "expo_available": true,
+  "expo_path": "projects/9bc1280a-fb34-490f-86f1-0b2d03827b17/expo",
+  "expo_download_url": "/api/projects/9bc1280a-fb34-490f-86f1-0b2d03827b17/expo-download",
+  "expo_download_label": "Создать и скачать ZIP",
+  "instructions": "Запуск «Я ТУТ v3 V2» на телефоне через Expo Go:\n1. Нажмите «Создать и скачать ZIP» (архив соберётся заново), распакуйте на компьютер.\n2. Установите Node.js 20+ (https://nodejs.org) и приложение Expo Go на телефон.\n   • iOS: App Store → «Expo Go»\n   • Android: Google Play → «Expo Go»\n3. В терминале откройте распакованную папку и выполните:\n   npm install\n   npx expo start\n4. Отсканируйте QR-код в Expo Go (телефон и компьютер — в одной Wi‑Fi сети).\nПодробности — в файле LAUNCH.md внутри архива.",
+  "simulator_exports": [
+    {
+      "platform": "Expo Go (после распаковки ZIP)",
+      "command": "npm install && npx expo start"
+    },
+    {
+      "platform": "iOS Simulator (только Mac + Xcode)",
+      "command": "npm install && npx expo run:ios"
+    },
+    {
+      "platform": "Android Emulator (Android Studio на ПК)",
+      "command": "npm install && npx expo run:android"
+    }
+  ]
+}

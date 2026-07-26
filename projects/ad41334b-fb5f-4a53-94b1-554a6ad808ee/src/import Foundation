@@ -1,0 +1,13 @@
+enum DeliveryMethod: String, CaseIterable, Codable {
+    case sms = "SMS"
+    case whatsapp = "WHATSAPP"
+    case telegram = "TELEGRAM"
+    
+    var displayName: String {
+        switch self {
+        case .sms: return "SMS по умолчанию"
+        case .whatsapp: return "WhatsApp"
+        case .telegram: return "Telegram"
+        }
+    }
+}

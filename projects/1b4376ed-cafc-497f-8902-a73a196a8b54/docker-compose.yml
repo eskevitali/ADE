@@ -1,0 +1,16 @@
+# ADI workspace — I'm here
+services:
+  workspace:
+    image: python:3.12-slim
+    container_name: ade-adi-1b4376ed-cafc-497f-8902-a73a196a8b54-workspace
+    working_dir: /workspace
+    volumes:
+      - /root/ADE-V4/projects/1b4376ed-cafc-497f-8902-a73a196a8b54/src:/workspace/src
+      - /root/ADE-V4/projects/1b4376ed-cafc-497f-8902-a73a196a8b54/data:/workspace/data
+    command: sleep infinity
+    restart: unless-stopped
+
+networks:
+  adi_net:
+    external: true
+    name: ade-adi-1b4376ed-cafc-497f-8902-a73a196a8b54

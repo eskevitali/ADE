@@ -1,0 +1,146 @@
+// CORE DATA ENTITIES (Domain Layer)
+// =============================================
+
+package com.readvoice.domain.model
+
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+import java.util.UUID
+
+@Entity(tableName = "documents")
+data class Document(
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val title: String,
+    val filePath: String,
+    val fileType: FileType,
+    val fileSize: Long,
+    val createdAt: Long = System.currentTimeMillis(),
+    val lastOpenedAt: Long? = null,
+    val totalPages: Int = 0,
+    val totalWords: Int = 0
+)
+
+enum class FileType { PDF, DOC, DOCX, TXT }
+
+@Entity(tableName = "reading_sessions")
+data class ReadingSession(
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val documentId: String,
+    val currentPosition: Int = 0,
+    val currentPage: Int = 1,
+    val readingMode: ReadingMode = ReadingMode.NORMAL_READING,
+    val lastUpdated: Long = System.currentTimeMillis(),
+    val readingSpeed: Float = 1.0f,
+    val fontSize: Float = 16.0f
+)
+
+enum class ReadingMode { NORMAL_READING, WORD_BY_WORD, AUDIO_PLAYBACK }
+
+@Entity(tableName = "reading_settings")
+data class ReadingSettings(
+    @PrimaryKey val id: Int = 1,
+    val defaultFontSize: Float = 16.0f,
+    val defaultReadingSpeed: Float = 1.0f,
+    val defaultTTSSpeed: Float = 1.0f,
+    val defaultTTSPitch: Float = 1.0f,
+    val wordByWordDelay: Long = 500L,
+    val autoSavePosition: Boolean = true,
+    val keepScreenOn: Boolean = true
+)
+
+// =============================================
+// REPOSITORY INTERFACES (Domain Layer)
+// =============================================
+
+package com.readvoice.domain.repository
+
+import com.readvoice.domain.model.Document
+import java.io.File
+
+interface DocumentRepository {
+    suspend fun getAllDocuments(): List<Document>
+    suspend fun getDocumentById(id: String): Document?
+    suspend fun addDocument(file: File): Document
+    suspend fun deleteDocument(id: String): Boolean
+    suspend fun updateDocument(document: Document): Boolean
+}
+
+// =============================================
+// TTS MANAGER INTERFACE (Domain Layer)
+// =============================================
+
+package com.readvoice.domain.tts
+
+import android.content.Context
+
+interface TTSManager {
+    fun initialize(context: Context, callback: TTSCallback)
+    fun speak(text: String, queueMode: Int = 0)
+    fun stop()
+    fun pause()
+    fun resume()
+    fun setSpeed(speed: Float)
+    fun setPitch(pitch: Float)
+    fun isPlaying(): Boolean
+    fun shutdown()
+}
+
+interface TTSCallback {
+    fun onInitSuccess()
+    fun onInitError()
+    fun onDone()
+}
+
+// =============================================
+// FILE PARSER INTERFACE (Domain Layer)
+// =============================================
+
+package com.readvoice.domain.parser
+
+import com.readvoice.domain.model.FileType
+import java.io.File
+
+interface FileParser {
+    fun canParse(file: File): Boolean
+    suspend fun parseToText(file: File): String
+    fun getSupportedExtensions(): List<String>
+}
+
+class DocumentParserFactory {
+    fun createParser(fileType: FileType): FileParser {
+        return when (fileType) {
+            FileType.PDF -> PDFParser()
+            FileType.DOC, FileType.DOCX -> DOCParser()
+            FileType.TXT -> TXTParser()
+        }
+    }
+}
+
+// Placeholder implementations (to be expanded with Apache POI / PDFBox)
+class PDFParser : FileParser { /* ... */ }
+class DOCParser : FileParser { /* ... */ }
+class TXTParser : FileParser { /* ... */ }
+
+// =============================================
+// READING POSITION MANAGER (Domain Layer)
+// =============================================
+
+package com.readvoice.domain.manager
+
+import com.readvoice.domain.model.ReadingSession
+import com.readvoice.domain.repository.ReadingSessionRepository // assume interface exists
+
+class ReadingPositionManager(
+    private val sessionRepository: ReadingSessionRepository
+) {
+    suspend fun savePosition(documentId: String, position: Int, page: Int, mode: com.readvoice.domain.model.ReadingMode) {
+        val session = ReadingSession(
+            documentId = documentId,
+            currentPosition = position,
+            currentPage = page,
+            readingMode = mode,
+            lastUpdated = System.currentTimeMillis()
+        )
+        sessionRepository.insertOrUpdate(session)
+    }
+}

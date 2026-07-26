@@ -1,0 +1,23 @@
+# ADI workspace — HITL Test V2
+# mode: simulator_preview
+services:
+  workspace:
+    image: python:3.12-slim
+    container_name: ade-adi-d671383f-ceee-4ac3-ac4f-b4ed605acd3b-workspace
+    working_dir: /workspace/preview
+    volumes:
+      - /root/ADE-V4/projects/d671383f-ceee-4ac3-ac4f-b4ed605acd3b/src:/workspace/src
+      - /root/ADE-V4/projects/d671383f-ceee-4ac3-ac4f-b4ed605acd3b/data:/workspace/data
+      - /root/ADE-V4/projects/d671383f-ceee-4ac3-ac4f-b4ed605acd3b/preview:/workspace/preview
+    command: python -m http.server 8080
+    restart: unless-stopped
+
+    ports:
+      - "18771:8080"
+    networks:
+      - default
+      - ade_proxy
+networks:
+  ade_proxy:
+    external: true
+    name: ade-v4_default

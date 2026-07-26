@@ -1,0 +1,27 @@
+# ADI workspace — Я ТУТ v3
+# mode: mobile_preview
+services:
+  workspace:
+    image: python:3.12-slim
+    container_name: ade-adi-ad41334b-fb5f-4a53-94b1-554a6ad808ee-workspace
+    working_dir: /workspace/preview
+    volumes:
+      - /root/ADE-V4/projects/ad41334b-fb5f-4a53-94b1-554a6ad808ee/src:/workspace/src
+      - /root/ADE-V4/projects/ad41334b-fb5f-4a53-94b1-554a6ad808ee/data:/workspace/data
+      - /root/ADE-V4/projects/ad41334b-fb5f-4a53-94b1-554a6ad808ee/preview:/workspace/preview
+    command: python -m http.server 8080
+    restart: unless-stopped
+
+    ports:
+      - "18484:8080"
+    networks:
+      - default
+      - ade_proxy
+      - adi_net
+networks:
+  ade_proxy:
+    external: true
+    name: ade-v4_default
+  adi_net:
+    external: true
+    name: ade-adi-ad41334b-fb5f-4a53-94b1-554a6ad808ee

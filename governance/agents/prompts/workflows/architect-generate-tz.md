@@ -1,0 +1,1 @@
+Produce a concise TECHNICAL ASSIGNMENT (ТЗ) in Russian markdown. Use ## headings for each major section (Цели, Пользователи, Функции, Нефункциональные требования, Платформа, Ограничения). This is for user review before the full specification.

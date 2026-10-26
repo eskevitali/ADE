@@ -836,6 +836,7 @@ async def workflow_view(
         {
             "task_id": task_id,
             "task_text": record.task,
+            "error": record.error,
             "status": record.status,
             "phase": record.phase,
             "project_id": record.project_id,

@@ -31,6 +31,7 @@
   <div class="glass rounded-xl p-4">
     <h2 class="font-semibold mb-2">Статус</h2>
     <div id="status-badge" class="text-2xl font-bold text-amber-300">{{ status }}</div>
+    <p id="workflow-error" role="alert" class="text-red-300 text-sm mt-3 whitespace-pre-wrap break-words{% if not error %} hidden{% endif %}">{{ error }}</p>
     <div id="phase" class="text-sm text-gray-500 mt-1">phase: {{ phase }}</div>
   </div>
 </div>
@@ -353,6 +354,8 @@
         break;
       case "task_failed":
         hideApproval();
+        document.getElementById("workflow-error").textContent = data.error || "Ошибка выполнения";
+        document.getElementById("workflow-error").classList.remove("hidden");
         addLog(`Error: ${data.error}`, "text-red-400"); statusEl.textContent = "failed"; statusEl.className = "text-2xl font-bold text-red-400"; break;
       case "task_completed":
         if (data.deliverable) showDeliverable(data.deliverable);

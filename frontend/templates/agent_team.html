@@ -16,10 +16,11 @@
 </div>
 
 <div class="glass rounded-xl p-4 mb-6 flex flex-wrap items-center gap-4 text-sm">
-  <span class="text-gray-400">Статус:</span>
-  <span id="team-online" class="text-emerald-300">{{ team_config.online_count }}/{{ team_config.team_count }} Online</span>
+  <span class="text-gray-400">Настройка доступа:</span>
+  <span id="team-online" class="text-amber-300">{{ team_config.online_count }}/{{ team_config.team_count }} — ключ API задан</span>
   <span class="text-gray-600">|</span>
   <span class="text-gray-400">Агентов: <strong id="team-count" class="text-white">{{ team_config.team_count }}</strong></span>
+  <span class="text-gray-400">Наличие ключа не подтверждает доступность модели. Авторизация и баланс проверяются провайдером при запросе.</span>
 </div>
 
 <div id="save-status" class="hidden mb-4 px-4 py-2 rounded-lg text-sm"></div>
@@ -37,9 +38,9 @@
         <p class="text-xs font-mono text-gray-600 mt-1">{{ agent.prompt_path }}</p>
       </div>
       <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs border
-        {% if agent.status == 'online' %}bg-emerald-900/40 text-emerald-300 border-emerald-500/30{% else %}bg-red-900/40 text-red-300 border-red-500/30{% endif %}">
-        <span class="w-1.5 h-1.5 rounded-full {% if agent.status == 'online' %}bg-emerald-400 animate-pulse{% else %}bg-red-400{% endif %}"></span>
-        {% if agent.status == 'online' %}Online{% else %}Offline{% endif %}
+        {% if agent.status == 'online' %}bg-amber-900/40 text-amber-300 border-amber-500/30{% else %}bg-red-900/40 text-red-300 border-red-500/30{% endif %}">
+        <span class="w-1.5 h-1.5 rounded-full {% if agent.status == 'online' %}bg-amber-400{% else %}bg-red-400{% endif %}"></span>
+        {% if agent.status == 'online' %}Ключ задан · доступ не проверен{% else %}Ключ не задан{% endif %}
       </span>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">

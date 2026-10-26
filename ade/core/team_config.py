@@ -105,16 +105,8 @@ WORKFLOW_DEFAULT_PROMPTS: dict[str, str] = {
     ),
 }
 
-SUGGESTED_MODELS: list[str] = [
-    "openrouter/anthropic/claude-sonnet-4",
-    "openrouter/anthropic/claude-3.5-sonnet",
-    "openrouter/x-ai/grok-3",
-    "openrouter/x-ai/grok-4",
-    "openrouter/openai/gpt-4.1",
-    "openrouter/openai/gpt-4o",
-    "openrouter/deepseek/deepseek-chat",
-    "xai/grok-3",
-]
+# The live catalogue is loaded by /api/team/models; keep saved selections offline.
+SUGGESTED_MODELS: list[str] = []
 
 
 class TeamConfigManager:

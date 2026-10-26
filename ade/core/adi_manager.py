@@ -200,6 +200,8 @@ networks:
                 target = staged / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(code.rstrip() + "\n", encoding="utf-8")
+            from ade.core.design_assets import copy_design
+            copy_design(root, staged)
             backup = Path(temporary) / "previous"
             if src_dir.exists():
                 src_dir.rename(backup)
@@ -562,7 +564,7 @@ networks:
                     src_files.append(
                         {
                             "name": file_path.relative_to(src_dir).as_posix(),
-                            "content": file_path.read_text(encoding="utf-8"),
+                            "content": (file_path.read_text(encoding="utf-8") if file_path.suffix.lower() in {".py", ".html", ".css", ".js", ".json", ".md", ".txt", ".yaml", ".yml"} else "[Бинарный ресурс]"),
                         }
                     )
 
@@ -570,6 +572,7 @@ networks:
 
         return {
             "project": project,
+            "design": json.loads((root / "design/brief.json").read_text()) if (root / "design/brief.json").is_file() else None,
             "tz": tz_path.read_text(encoding="utf-8") if tz_path.exists() else "",
             "spec": spec_path.read_text(encoding="utf-8") if spec_path.exists() else "",
             "review": review_path.read_text(encoding="utf-8") if review_path.exists() else "",

@@ -5,7 +5,7 @@
   <h1 class="text-3xl font-bold text-white mb-2">New Project</h1>
   <p class="text-gray-400 mb-8">Опишите идею — ADE создаст изолированный ADI и запустит workflow: Spec → Code → Review</p>
 
-  <form method="post" action="/projects/new" class="glass rounded-xl p-6 space-y-5">
+  <form method="post" action="/projects/new" enctype="multipart/form-data" class="glass rounded-xl p-6 space-y-5">
     <div>
       <label class="block text-sm font-medium text-gray-300 mb-2">Название проекта</label>
       <input type="text" name="project_name" maxlength="120"
@@ -25,6 +25,25 @@
         <option value="supervisor">Supervisor (multi-agent routing)</option>
       </select>
     </div>
+    <fieldset class="space-y-3 border border-indigo-500/30 rounded-lg p-4">
+      <legend class="px-2 text-white">Оформление проекта</legend>
+      <label for="design-style">Визуальный стиль</label>
+      <select id="design-style" name="design_style" class="w-full bg-gray-900 rounded-lg p-3">
+        <option value="auto">На усмотрение дизайнера</option>
+        <option value="minimal">Минимализм</option><option value="corporate">Корпоративный</option>
+        <option value="editorial">Редакционный</option><option value="playful">Яркий и дружелюбный</option>
+        <option value="custom">Свой фирменный стиль</option>
+      </select>
+      <label for="design-notes" class="block">Цвета, настроение и пожелания</label>
+      <textarea id="design-notes" name="design_notes" maxlength="4000" rows="3" class="w-full bg-gray-900 rounded-lg p-3"></textarea>
+      <label for="brand-css" class="block">Файл стилей CSS (UTF-8, до 100 КБ)</label>
+      <input id="brand-css" name="stylesheet" type="file" accept=".css" class="w-full">
+      <label for="brand-logo" class="block">Логотип PNG, JPEG или WebP</label>
+      <input id="brand-logo" name="logo" type="file" accept=".png,.jpg,.jpeg,.webp" class="w-full">
+      <label for="brand-fonts" class="block">Шрифты WOFF, WOFF2, TTF или OTF</label>
+      <input id="brand-fonts" name="fonts" type="file" accept=".woff,.woff2,.ttf,.otf" multiple class="w-full">
+      <p class="text-sm text-gray-400">До 8 шрифтов; до 5 МБ на файл, до 20 МБ суммарно. Имена файлов — латиницей. Материалы попадут в требования и сборку проекта.</p>
+    </fieldset>
     <div class="flex items-center gap-3">
       <input type="checkbox" name="human_in_loop" value="on" id="hitl" checked
         class="w-4 h-4 rounded border-indigo-500/30 bg-gray-900 text-indigo-600 focus:ring-indigo-500">

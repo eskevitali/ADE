@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, File, UploadFile, Form, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -23,6 +23,8 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from ade import __version__
 from ade.core.adi_manager import ADIManager
+from ade.core.design_assets import MAX_FILE, MAX_TOTAL, STYLES, save_design, validate_asset
+from ade.core.model_catalog import catalogue
 from ade.core.agent_team import DEFAULT_MODELS, AgentConfig, AgentRole
 from ade.core.team_config import SUGGESTED_MODELS, get_team_manager, load_agent_team
 from ade.core.approval_gate import approval_gate
@@ -596,15 +598,44 @@ async def new_project_submit(
     task: str = Form(...),
     workflow: str = Form(default="dev_cycle"),
     project_name: str = Form(default=""),
-    human_in_loop: str = Form(default="on"),
+    human_in_loop: str = Form(default=""),
+    design_style: str = Form(default="auto"),
+    design_notes: str = Form(default=""),
+    stylesheet: UploadFile | None = File(default=None),
+    logo: UploadFile | None = File(default=None),
+    fonts: list[UploadFile] = File(default=[]),
     _user: str = Depends(require_user),
 ) -> RedirectResponse:
+    assets = []
+    try:
+        if design_style not in STYLES or len(design_notes) > 4000:
+            raise ValueError("Некорректное оформление проекта")
+        uploads = [("stylesheet", stylesheet), ("logo", logo)] + [("font", f) for f in fonts]
+        if len(fonts) > 8:
+            raise ValueError("Не больше 8 шрифтов")
+        for kind, upload in uploads:
+            if upload and upload.filename:
+                try:
+                    data = await upload.read(MAX_FILE + 1)
+                    validate_asset(kind, upload.filename, data)
+                    assets.append((kind, upload.filename, data))
+                finally:
+                    await upload.close()
+        if sum(len(data) for _, _, data in assets) > MAX_TOTAL:
+            raise ValueError("Суммарный размер файлов не больше 20 МБ")
+        if len({name.lower() for _, name, _ in assets}) != len(assets):
+            raise ValueError("Имена файлов должны быть уникальными")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     task_id = str(uuid.uuid4())
     project_id = str(uuid.uuid4())
     name = project_name.strip() or task[:60].strip()
     hitl = human_in_loop == "on"
 
     adi_manager.bootstrap(project_id, name, task, task_id=task_id)
+    if assets or design_notes or design_style != "auto":
+        brief = save_design(adi_manager.project_path(project_id), design_style, design_notes, assets)
+        task += "\n\n" + brief
     _log_event(project_id, "project_created", {"name": name, "task_id": task_id}, actor=_user)
 
     tasks[task_id] = TaskRecord(
@@ -691,6 +722,8 @@ async def project_view(
             "spec": detail["spec"],
             "review": detail["review"],
             "src_files": detail["src_files"],
+            "design": detail.get("design"),
+            "design_styles": STYLES,
             "deliverable": deliverable,
             "workflow_url": workflow_url,
             "acceptance_status": project.acceptance_status,
@@ -839,7 +872,7 @@ def generated_content_headers(prefix: str | None = None) -> dict[str, str]:
         "Content-Security-Policy": (
             "sandbox allow-scripts allow-forms; default-src 'none'; "
             f"script-src 'unsafe-inline' {resource}; style-src 'unsafe-inline' {resource}; "
-            f"img-src data: blob: {resource}; font-src {resource}; "
+            f"img-src data: blob: {resource}; font-src data: {resource}; "
             f"connect-src {resource}; form-action {resource}; base-uri 'none'; "
             "frame-ancestors 'self'"
         ),
@@ -1024,6 +1057,11 @@ async def agent_team_page(request: Request, user: str = Depends(require_user)) -
 @app.get("/api/team")
 async def get_team(_user: str = Depends(require_user)) -> dict[str, Any]:
     return build_team_payload()
+
+
+@app.get("/api/team/models")
+async def get_model_catalogue(_user: str = Depends(require_user)) -> dict[str, Any]:
+    return await catalogue()
 
 
 @app.get("/api/team/config")

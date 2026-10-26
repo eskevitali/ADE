@@ -18,6 +18,18 @@
   </div>
 </div>
 
+{% if design %}
+<section class="glass rounded-xl p-5 mb-6">
+  <h2 class="text-lg font-semibold mb-2">Оформление проекта</h2>
+  <p>{{ design_styles.get(design.style, design.style) }}</p>
+  {% if design.notes %}<p class="text-gray-300 mt-2 whitespace-pre-wrap">{{ design.notes }}</p>{% endif %}
+  <ul class="mt-3 text-sm text-gray-400">
+  {% for asset in design.files %}<li>{{ asset.name }} · {{ asset.size }} байт</li>{% endfor %}
+  </ul>
+  <p class="mt-2 text-xs text-gray-500">Материалы сохраняются при повторной генерации и включаются в релиз.</p>
+</section>
+{% endif %}
+
 {% if pending_revision_id %}
 <div class="glass rounded-xl p-4 mb-6 border border-amber-500/40 bg-amber-950/20">
   <p class="text-amber-200 text-sm mb-2">Есть непросмотренная доработка #{{ pending_revision_id }}</p>

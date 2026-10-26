@@ -77,10 +77,10 @@ class ReleaseService:
                 if file.is_file():
                     name = file.relative_to(root).as_posix()
                     validate_relative_path(name)
-                    if file.stat().st_size > 2_000_000:
+                    if file.stat().st_size > (30_000_000 if name.startswith('src/assets/brand/') else 2_000_000):
                         raise ValueError('Release input is too large')
                     inputs[name] = file.read_bytes()
-        if sum(map(len, inputs.values())) > 10_000_000 or len(inputs) > 500:
+        if sum(map(len, inputs.values())) > 50_000_000 or len(inputs) > 500:
             raise ValueError('Release input limit exceeded')
         return inputs
 

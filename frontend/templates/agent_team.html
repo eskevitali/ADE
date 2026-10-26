@@ -23,6 +23,11 @@
   <span class="text-gray-400">Наличие ключа не подтверждает доступность модели. Авторизация и баланс проверяются провайдером при запросе.</span>
 </div>
 
+<div class="mb-4 flex flex-wrap gap-3 items-center">
+  <button type="button" id="refresh-models" class="px-4 py-2 rounded-lg bg-indigo-700">Обновить каталог моделей</button>
+  <input id="model-search" type="search" aria-label="Поиск модели" placeholder="Поиск модели…" class="bg-gray-900 rounded-lg px-3 py-2">
+  <span id="catalogue-status" class="text-sm text-gray-400">Загрузка каталога OpenRouter…</span>
+</div>
 <div id="save-status" class="hidden mb-4 px-4 py-2 rounded-lg text-sm"></div>
 
 <div id="agents-container" class="space-y-4">
@@ -198,5 +203,39 @@
       btn.disabled = false;
     }
   });
+  async function loadModels() {
+    const button = document.getElementById('refresh-models');
+    const status = document.getElementById('catalogue-status');
+    button.disabled = true;
+    try {
+      const res = await fetch('/api/team/models', {credentials: 'same-origin'});
+      if (!res.ok) throw new Error('Каталог недоступен');
+      const data = await res.json();
+      if (data.models.length) document.querySelectorAll('.agent-model').forEach(select => {
+        const selected = select.value;
+        const defaultModel = document.querySelector(`.default-model-store[data-role="${select.dataset.role}"]`).value;
+        select.replaceChildren();
+        const ids = [...new Set([selected, defaultModel, ...data.models])];
+        ids.forEach(id => {
+          const option = document.createElement('option');
+          option.value = id;
+          option.textContent = id + (!data.models.includes(id) ? ' (сохранённая; вне каталога OpenRouter)' : '');
+          select.append(option);
+        });
+        select.value = selected;
+      });
+      status.textContent = data.message;
+    } catch (error) {
+      status.textContent = 'Не удалось загрузить каталог. Сохранённые модели доступны.';
+    } finally { button.disabled = false; }
+  }
+  document.getElementById('refresh-models').addEventListener('click', loadModels);
+  document.getElementById('model-search').addEventListener('input', event => {
+    const query = event.target.value.trim().toLowerCase();
+    document.querySelectorAll('.agent-model option').forEach(option => {
+      option.hidden = !option.selected && !option.value.toLowerCase().includes(query);
+    });
+  });
+  loadModels();
 </script>
 {% endblock %}

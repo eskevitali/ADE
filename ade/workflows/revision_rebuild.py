@@ -56,6 +56,9 @@ class RevisionRebuildOrchestrator:
         spec = detail["spec"]
         task = project.idea
         project_path = self.adi.project_path(project_id)
+        design_brief = project_path / "spec" / "DESIGN.md"
+        if design_brief.is_file():
+            task += "\n\n" + design_brief.read_text()
 
         self.adi.reset_recovery(project_id)
         self.adi.set_rebuild_status(

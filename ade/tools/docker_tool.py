@@ -42,7 +42,10 @@ class DockerTool:
     def _run(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         cmd = ["docker", *args]
         logger.debug("Running: %s", " ".join(cmd))
-        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=30)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise DockerToolError(f"Docker unavailable: {type(exc).__name__}") from exc
         if check and result.returncode != 0:
             stderr = result.stderr.strip() or result.stdout.strip()
             raise DockerToolError(f"docker {' '.join(args)} failed: {stderr}")

@@ -27,8 +27,10 @@ PUBLIC_PREFIXES = ("/docs/", "/redoc/", "/static/")
 
 def verify_credentials(username: str, password: str) -> bool:
     config = get_config()
-    user_ok = secrets.compare_digest(username.strip(), config.admin_username)
-    pass_ok = secrets.compare_digest(password, config.admin_password)
+    if not config.admin_username or not config.admin_password:
+        return False
+    user_ok = secrets.compare_digest(username.strip().encode(), config.admin_username.encode())
+    pass_ok = secrets.compare_digest(password.encode(), config.admin_password.encode())
     return user_ok and pass_ok
 
 

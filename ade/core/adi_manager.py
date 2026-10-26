@@ -6,14 +6,16 @@ import json
 import logging
 import re
 import shutil
-import subprocess
 import uuid
+import tempfile
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from ade.core.config import get_config
+from ade.core.artifacts import parse_source_files
+from ade.core.engineering import atomic_json, project_lock
 from ade.tools.docker_tool import DockerTool, DockerToolError
 
 logger = logging.getLogger(__name__)
@@ -67,7 +69,13 @@ class ADIManager:
         self.projects_dir.mkdir(parents=True, exist_ok=True)
 
     def project_path(self, project_id: str) -> Path:
-        return self.projects_dir / project_id
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", project_id):
+            raise ValueError("Invalid project ID")
+        root = self.projects_dir.resolve()
+        target = root / project_id
+        if target.is_symlink() or target.resolve().parent != root:
+            raise ValueError("Project path escapes workspace")
+        return target
 
     def bootstrap(
         self,
@@ -143,8 +151,9 @@ networks:
     external: true
     name: {project.network}
 """
+        safe_name = project.name.replace("\n", " ").replace("\r", " ")
         compose_path.write_text(
-            f"# ADI workspace — {project.name}\n"
+            f"# ADI workspace — {safe_name}\n"
             f"services:\n"
             f"  workspace:\n"
             f"    image: python:3.12-slim\n"
@@ -174,23 +183,33 @@ networks:
         return path
 
     def write_code(self, project_id: str, content: str, *, update_status: bool = True) -> list[Path]:
-        blocks = extract_code_blocks(content)
-        written: list[Path] = []
-        src_dir = self.project_path(project_id) / "src"
+        with project_lock(self.project_path(project_id)):
+            return self._write_code_locked(project_id, content, update_status=update_status)
 
-        if blocks:
-            for idx, (filename, code) in enumerate(blocks):
-                name = filename.strip() or f"module_{idx + 1}.py"
-                if "/" in name or "\\" in name:
-                    name = Path(name).name
-                target = src_dir / name
-                target.write_text(code.strip() + "\n", encoding="utf-8")
-                written.append(target)
-        else:
-            target = src_dir / "main.py"
-            target.write_text(content, encoding="utf-8")
-            written.append(target)
-
+    def _write_code_locked(self, project_id: str, content: str, *, update_status: bool) -> list[Path]:
+        files = parse_source_files(content)  # Validate the entire response before writing.
+        root = self.project_path(project_id)
+        src_dir = root / "src"
+        if src_dir.is_symlink():
+            raise ValueError("Source directory must not be a symlink")
+        # Build a complete replacement so deleted files cannot survive a regeneration.
+        with tempfile.TemporaryDirectory(prefix=".source-", dir=root) as temporary:
+            staged = Path(temporary) / "src"
+            staged.mkdir()
+            for name, code in files:
+                target = staged / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(code.rstrip() + "\n", encoding="utf-8")
+            backup = Path(temporary) / "previous"
+            if src_dir.exists():
+                src_dir.rename(backup)
+            try:
+                staged.rename(src_dir)
+            except OSError:
+                if backup.exists():
+                    backup.rename(src_dir)
+                raise
+        written = [src_dir / name for name, _ in files]
         if update_status:
             self._update_status(project_id, "code_ready")
         return written
@@ -211,10 +230,7 @@ networks:
     def _write_manifest(self, project_id: str, data: dict[str, Any]) -> None:
         data["updated_at"] = datetime.now(UTC).isoformat()
         manifest_path = self.project_path(project_id) / "manifest.json"
-        manifest_path.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        atomic_json(manifest_path, data)
 
     def _update_status(self, project_id: str, status: str) -> None:
         data = self._read_manifest(project_id)
@@ -521,8 +537,12 @@ networks:
         manifest_path = self.project_path(project_id) / "manifest.json"
         if not manifest_path.exists():
             return None
-        data = json.loads(manifest_path.read_text(encoding="utf-8"))
-        return ADIProject(**{k: v for k, v in data.items() if k in ADIProject.__dataclass_fields__})
+        try:
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+            return ADIProject(**{k: v for k, v in data.items() if k in ADIProject.__dataclass_fields__})
+        except (ValueError, TypeError, AttributeError):
+            logger.warning("Skipping invalid project manifest: %s", project_id)
+            return None
 
     def get_project_detail(self, project_id: str) -> dict[str, Any] | None:
         project = self.get_project(project_id)
@@ -537,11 +557,11 @@ networks:
 
         src_files: list[dict[str, str]] = []
         if src_dir.is_dir():
-            for file_path in sorted(src_dir.iterdir()):
+            for file_path in sorted(src_dir.rglob("*")):
                 if file_path.is_file():
                     src_files.append(
                         {
-                            "name": file_path.name,
+                            "name": file_path.relative_to(src_dir).as_posix(),
                             "content": file_path.read_text(encoding="utf-8"),
                         }
                     )
@@ -610,7 +630,7 @@ networks:
             self.docker.remove_network(project_id)
 
     DUPLICATE_SKIP_NAMES = frozenset(
-        {"node_modules", ".expo", "expo-mobile.zip", "revisions"}
+        {"node_modules", ".expo", "expo-mobile.zip", "revisions", "releases", ".engineering.lock"}
     )
 
     def suggest_duplicate_name(self, source_name: str) -> str:
@@ -738,11 +758,5 @@ networks:
 
 
 def extract_code_blocks(content: str) -> list[tuple[str, str]]:
-    """Extract fenced code blocks; optional first-line filename hint."""
-    blocks: list[tuple[str, str]] = []
-    for match in CODE_BLOCK_RE.finditer(content):
-        filename = match.group("filename") or ""
-        code = match.group("code") or ""
-        if code.strip():
-            blocks.append((filename, code))
-    return blocks
+    """Compatibility API for the validated source artifact parser."""
+    return parse_source_files(content)

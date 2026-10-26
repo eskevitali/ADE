@@ -87,15 +87,63 @@
   <p class="text-gray-300 whitespace-pre-wrap">{{ project.idea }}</p>
 </div>
 
+<section id="engineering-panel" class="glass rounded-xl p-5 mb-6 border border-indigo-500/20">
+  <h2 class="font-semibold mb-2">Проверки и релизы</h2>
+  <p class="text-sm text-gray-400 mb-3">Перед выпуском ADE сохраняет исходники и спецификацию, проверяет их и запускает Python-тесты в отдельной песочнице. Непрошедший проверку релиз не запускается.</p>
+  <div class="flex gap-3 mb-3">
+    <button id="btn-verify" type="button" class="bg-indigo-700 hover:bg-indigo-600 px-4 py-2 rounded-lg text-sm">Проверить</button>
+    <button id="btn-rollback" type="button" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm" disabled>Откатить релиз</button>
+  </div>
+  <p id="engineering-message" role="status" class="text-sm text-gray-400"></p>
+  <pre id="engineering-report" class="mt-3 text-xs whitespace-pre-wrap max-h-64 overflow-auto"></pre>
+</section>
+<script>
+(() => {
+  const base = '/api/projects/' + {{ project.id | tojson }};
+  const message = document.getElementById('engineering-message');
+  const report = document.getElementById('engineering-report');
+  const verify = document.getElementById('btn-verify');
+  const rollback = document.getElementById('btn-rollback');
+  async function refresh() {
+    const response = await fetch(base + '/engineering');
+    if (!response.ok) throw new Error('Не удалось получить состояние релизов');
+    const state = await response.json();
+    message.textContent = 'Проверки: ' + (state.quality_status || 'not_checked') +
+      '; активный релиз: ' + (state.active_release_id || 'пока нет');
+    rollback.disabled = !state.previous_release_id;
+    const latest = state.verification || state.releases?.[0];
+    report.textContent = latest ? latest.checks.map(c =>
+      (c.passed ? '✓ ' : '✗ ') + c.name + (c.detail ? '\n' + c.detail : '')).join('\n') : '';
+  }
+  async function act(action, label) {
+    verify.disabled = true;
+    rollback.disabled = true;
+    message.textContent = label;
+    try {
+      const response = await fetch(base + '/' + action, {method: 'POST'});
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail || 'Ошибка запроса: ' + response.status);
+      await refresh();
+      if (result.status === 'error') message.textContent = result.detail || result.message;
+    } catch (error) { message.textContent = error.message; }
+    finally { verify.disabled = false; }
+  }
+  window.addEventListener('ade:release-updated', () => refresh().catch(error => { message.textContent = error.message; }));
+  verify.addEventListener('click', () => act('verify', 'Проверка в песочнице…'));
+  rollback.addEventListener('click', () => act('rollback', 'Восстановление предыдущего релиза…'));
+  refresh().catch(error => { message.textContent = error.message; });
+})();
+</script>
+
 <div id="workspace-panel" class="glass rounded-xl p-5 mb-6 border border-cyan-500/20">
   <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
     <h2 class="font-semibold text-cyan-300">Running Workspace</h2>
     <button id="btn-deploy" type="button"
       class="bg-cyan-700 hover:bg-cyan-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
-      Deploy
+      Проверить и развернуть
     </button>
   </div>
-  <p class="text-xs text-gray-500 mb-3">Deploy занимает до 1–2 мин. Для симуляторов и веб-приложений — ссылка <code class="text-gray-400">/preview/…/simulator</code> или <code class="text-gray-400">/run/…</code>. Консольные скрипты без UI — только логи.</p>
+  <p class="text-xs text-gray-500 mb-3">Проверки и запуск могут занять несколько минут. Готовый релиз открывается по ссылке ниже. Макеты и симуляторы остаются отдельными превью и не подтверждают готовность продукта.</p>
   <div id="workspace-status" class="text-sm space-y-2">
     <div class="flex flex-wrap gap-4">
       <span class="text-gray-400">Контейнер: <span id="ws-container" class="font-mono text-gray-300">{{ workspace.container or '—' }}</span></span>
@@ -350,6 +398,7 @@
       msg.className = "text-sm text-red-300 mt-2";
     } finally {
       clearInterval(pollTimer);
+      window.dispatchEvent(new Event('ade:release-updated'));
       spinner?.classList.add("hidden");
       btn.disabled = false;
     }

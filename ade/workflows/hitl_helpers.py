@@ -8,13 +8,15 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from ade.core.agent_team import AgentRole, AgentTeam
 from ade.core.llm_provider import get_llm
+from ade.core.policy_context import organizational_context
 from ade.core.team_config import get_workflow_prompt
-from ade.core.spec_parser import parse_sections, rebuild_markdown, replace_section
+from ade.core.spec_parser import parse_sections, replace_section
 
 
 def _architect(team: AgentTeam, system: str, messages: list) -> str:
     config = team.get(AgentRole.ARCHITECT)
     llm = get_llm(config.model)
+    system += "\n\n" + organizational_context(str(messages[-1].content) if messages else "")
     response = llm.invoke([SystemMessage(content=system), *messages])
     content = response.content if isinstance(response.content, str) else str(response.content)
     return content

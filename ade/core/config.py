@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
@@ -51,6 +52,10 @@ class ADEConfig(BaseSettings):
     postgres_url: str = "postgresql://ade:ade@localhost:5432/ade"
     redis_url: str = "redis://localhost:6379/0"
 
+    # Bounded execution policy; provision this image explicitly on the ADE server.
+    workspace_image: str = "python:3.12-slim"
+    sandbox_timeout: int = Field(default=60, ge=1, le=300)
+
     # Recovery loop (Tester-driven auto-fix on deploy/rebuild failures)
     max_recovery_attempts: int = 3
 
@@ -59,14 +64,25 @@ class ADEConfig(BaseSettings):
     log_level: str = "info"
     api_host: str = "0.0.0.0"
     api_port: int = 8000
-    domain: str = "ade.kider.at"
+    domain: str = "ade.vor-ort-service-rusz.at"
 
     # Auth (session-based)
-    session_secret: str = "ade-v4-change-this-secret-in-production"
-    admin_username: str = "eskevitali@gmail.com"
-    admin_password: str = "777025!Jestex"
+    session_secret: str = Field(default_factory=lambda: secrets.token_urlsafe(48))
+    admin_username: str = ""
+    admin_password: str = ""
 
     def model_post_init(self, __context: object) -> None:
+        if self.app_env == "production":
+            if not self.admin_username or len(self.admin_password) < 16:
+                raise ValueError("Production requires ADMIN_USERNAME and ADMIN_PASSWORD (16+ characters)")
+            if "session_secret" not in self.model_fields_set or len(self.session_secret) < 32:
+                raise ValueError("Production requires an explicit SESSION_SECRET (32+ characters)")
+            if self.session_secret == "ade-v4-change-this-secret-in-production":
+                raise ValueError("Replace the published session secret")
+        if self.session_secret == "ade-v4-change-this-secret-in-production":
+            raise ValueError("Replace the published SESSION_SECRET before starting ADE")
+        if not self.session_secret:
+            object.__setattr__(self, "session_secret", secrets.token_urlsafe(48))
         defaults = {
             "projects_dir": self.root_dir / "projects",
             "knowledge_dir": self.root_dir / "knowledge",

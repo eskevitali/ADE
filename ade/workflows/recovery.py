@@ -47,7 +47,7 @@ class RecoveryDecision:
 
 def classify_failure_heuristic(ctx: FailureContext) -> RecoveryDecision | None:
     """Fast rule-based routing when the error pattern is unambiguous."""
-    err = (ctx.error or ctx.deploy_error).lower()
+    err = (ctx.error + "\n" + ctx.deploy_error).lower()
     if not err:
         return None
 
@@ -109,7 +109,6 @@ def analyze_failure_with_tester(team: AgentTeam, ctx: FailureContext) -> Recover
         return heuristic
 
     config = team.get(AgentRole.TESTER)
-    llm = get_llm(config.model)
     prompt = (
         f"Failure type: {ctx.failure_type}\n"
         f"Phase: {ctx.phase}\n"
@@ -124,6 +123,7 @@ def analyze_failure_with_tester(team: AgentTeam, ctx: FailureContext) -> Recover
         'Reply with JSON only: {"action":"...", "reason":"...", "fix_hint":"..."}'
     )
     try:
+        llm = get_llm(config.model)
         response = llm.invoke(
             [
                 SystemMessage(

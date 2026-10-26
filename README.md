@@ -1,3 +1,11 @@
+# ADE 0.2.0 — инженерная организация на сервере владельца
+
+[Product Vision](PRODUCT_VISION.md) · [Обновление и серверные тесты](docs/SERVER_TEST_0_2_0.md) · [Состояние реализации](docs/IMPLEMENTATION_PLAN.md)
+
+Версия 0.2.0 добавляет безопасное сохранение исходников, проверяемые релизы,
+Docker-песочницу тестов, проверки готовности, откат и утверждаемую инженерную память.
+Ниже сохранена документация предыдущего прототипа; при обновлении используйте инструкцию выше.
+
 # 🚀 ADE v4 — Autonomous Development Environment
 
 Автономная harness-система следующего поколения для создания и управления **Autonomous Development Instances (ADI)**.
@@ -70,7 +78,7 @@ uv run uvicorn ade.ui.main:app --reload --host 0.0.0.0 --port 8000
 |------|----------|
 | URL входа | https://ade.kider.at/login |
 | Логин | `eskevitali@gmail.com` |
-| Пароль | `777025!Jestex` |
+| Пароль | `(задаётся в ADMIN_PASSWORD; опубликованный пароль необходимо заменить)` |
 
 Переменные в `.env` (опционально): `SESSION_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`.
 

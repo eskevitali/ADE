@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import operator
 from collections.abc import Callable
 from typing import Annotated, Any, TypedDict
 
@@ -13,6 +12,7 @@ from langgraph.graph.message import add_messages
 from ade.core.agent_team import AgentRole, AgentTeam
 from ade.core.llm_provider import get_llm
 from ade.core.team_config import get_workflow_prompt
+from ade.core.policy_context import organizational_context, SOURCE_CONTRACT
 
 EventCallback = Callable[[str, dict[str, Any]], None]
 
@@ -32,7 +32,9 @@ class DevCycleState(TypedDict):
 def _invoke_agent(team: AgentTeam, role: AgentRole, state: DevCycleState, extra: str = "") -> str:
     config = team.get(role)
     llm = get_llm(config.model)
-    system = config.system_prompt
+    system = config.system_prompt + "\n\n" + organizational_context(state["task"])
+    if role == AgentRole.CODER:
+        system += "\n\n" + SOURCE_CONTRACT
     if extra:
         system = f"{system}\n\n{extra}"
     response = llm.invoke([SystemMessage(content=system), *state["messages"]])

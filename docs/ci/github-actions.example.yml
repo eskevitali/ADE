@@ -1,0 +1,20 @@
+name: ADE checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  engineering:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+      - run: uv sync --frozen --extra dev
+      - run: uv run --no-sync ruff check ade tests conftest.py
+      - run: uv run --no-sync pytest -q
+      - run: docker pull python:3.12-slim
+      - run: uv run --no-sync pytest -q -m docker --run-docker

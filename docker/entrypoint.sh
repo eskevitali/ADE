@@ -16,4 +16,4 @@ for i in $(seq 1 30); do
   sleep 2
 done
 
-exec uv run uvicorn ade.ui.main:app --host "${HOST}" --port "${PORT}"
+exec uv run --no-sync uvicorn ade.ui.main:app --host "${HOST}" --port "${PORT}"

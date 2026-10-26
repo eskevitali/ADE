@@ -49,3 +49,8 @@ Thumbs.db
 # Docker local volumes (if any)
 postgres-data/
 qdrant-data/
+
+# Owner state and immutable ADI release snapshots
+/data/
+projects/**/releases/
+projects/**/.engineering.lock

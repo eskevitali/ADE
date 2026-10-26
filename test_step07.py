@@ -6,6 +6,8 @@ from __future__ import annotations
 import sys
 import uuid
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from ade.core.adi_manager import ADIManager
@@ -38,11 +40,13 @@ def test_event_store_schema() -> None:
     print("[OK] Event store record + list")
 
 
+@pytest.mark.docker
 def test_deploy_workspace() -> None:
     adi = ADIManager()
     deployer = DeployerService(adi_manager=adi)
     temp_id = f"test-deploy-{uuid.uuid4().hex[:8]}"
     adi.bootstrap(temp_id, "Deploy Test", "web static test")
+    adi.write_spec(temp_id, "# Static site\nDisplay a heading")
     src = adi.project_path(temp_id) / "src"
     src.mkdir(exist_ok=True)
     (src / "index.html").write_text("<html><body><h1>ADE Deploy OK</h1></body></html>", encoding="utf-8")
@@ -77,10 +81,12 @@ def test_compose_python_script_mode() -> None:
     shutil.rmtree(adi.project_path(temp_id), ignore_errors=True)
 
 
+@pytest.mark.docker
 def test_deploy_api() -> None:
     adi = ADIManager()
     temp_id = f"test-deploy-api-{uuid.uuid4().hex[:8]}"
     adi.bootstrap(temp_id, "API Deploy", "api test")
+    adi.write_spec(temp_id, "# Static site\nDisplay a heading")
     (adi.project_path(temp_id) / "src").mkdir(exist_ok=True)
     (adi.project_path(temp_id) / "src" / "index.html").write_text("<h1>api</h1>", encoding="utf-8")
 

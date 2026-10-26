@@ -12,6 +12,7 @@ from langgraph.graph.message import add_messages
 from ade.core.agent_team import AgentRole, AgentTeam
 from ade.core.llm_provider import get_llm
 from ade.core.team_config import get_workflow_prompt
+from ade.core.policy_context import organizational_context
 
 WORKER_NODES = {
     AgentRole.ARCHITECT: "architect",
@@ -63,7 +64,7 @@ def _make_agent_node(role: AgentRole, team: AgentTeam):
         llm = get_llm(config.model)
         response = llm.invoke(
             [
-                SystemMessage(content=config.system_prompt),
+                SystemMessage(content=config.system_prompt + "\n\n" + organizational_context(state["task"])),
                 *state["messages"],
             ]
         )
@@ -88,7 +89,7 @@ def _supervisor_node(team: AgentTeam):
         llm = get_llm(supervisor.model)
         workers = ", ".join(WORKER_NODES.values())
         prompt = (
-            f"{supervisor.system_prompt}\n\n"
+            f"{supervisor.system_prompt}\n\n{organizational_context(state['task'])}\n\n"
             f"Task: {state['task']}\n"
             f"Available workers: {workers}\n"
             f"{get_workflow_prompt('supervisor-route')}"

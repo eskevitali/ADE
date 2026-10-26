@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, Form, Request, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Form, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -23,7 +23,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from ade import __version__
 from ade.core.adi_manager import ADIManager
-from ade.core.agent_team import DEFAULT_MODELS, AgentConfig, AgentRole, AgentTeam
+from ade.core.agent_team import DEFAULT_MODELS, AgentConfig, AgentRole
 from ade.core.team_config import SUGGESTED_MODELS, get_team_manager, load_agent_team
 from ade.core.approval_gate import approval_gate
 from ade.core.auth import (
@@ -46,6 +46,8 @@ from ade.core.deliverable import (
     write_deliverable_manifest,
 )
 from ade.core.deployer import DeployerService
+from ade.core.engineering import ReleaseService
+from ade.memory.lessons import LessonStore
 from ade.core.revision_diff import compare_sections, summarize_changes
 from ade.core.spec_parser import parse_sections
 from ade.core.model_registry import format_model_display, get_model_style
@@ -452,7 +454,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(AuthMiddleware)
-app.add_middleware(SessionMiddleware, secret_key=config.session_secret, max_age=86400 * 7)
+app.add_middleware(SessionMiddleware, secret_key=config.session_secret, max_age=86400 * 7,
+                   https_only=config.app_env == "production", same_site="lax")
 if STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -828,6 +831,23 @@ def _gate_document(record: TaskRecord, gate: str) -> str:
     return ""
 
 
+def generated_content_headers(prefix: str | None = None) -> dict[str, str]:
+    # Generated pages must not inherit the control panel's origin or permissions.
+    origin = f"https://{get_config().domain}"
+    resource = origin + prefix if prefix else "'none'"
+    return {
+        "Content-Security-Policy": (
+            "sandbox allow-scripts allow-forms; default-src 'none'; "
+            f"script-src 'unsafe-inline' {resource}; style-src 'unsafe-inline' {resource}; "
+            f"img-src data: blob: {resource}; font-src {resource}; "
+            f"connect-src {resource}; form-action {resource}; base-uri 'none'; "
+            "frame-ancestors 'self'"
+        ),
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
+    }
+
+
 @app.get("/preview/{project_id}")
 async def preview_web(
     project_id: str, user: str = Depends(require_user)
@@ -836,7 +856,7 @@ async def preview_web(
     for name in ("index.html", "app.html", "main.html"):
         path = src / name
         if path.exists():
-            return FileResponse(path)
+            return FileResponse(path, headers=generated_content_headers())
     sim = adi_manager.project_path(project_id) / "preview" / "timer-simulator.html"
     if sim.exists():
         return RedirectResponse(url=f"/preview/{project_id}/simulator", status_code=303)
@@ -852,7 +872,7 @@ async def preview_simulator(
 ) -> Response:
     sim = adi_manager.project_path(project_id) / "preview" / "timer-simulator.html"
     if sim.exists():
-        return FileResponse(sim)
+        return FileResponse(sim, headers=generated_content_headers())
     return HTMLResponse("<h1>Симулятор не сгенерирован</h1>", status_code=404)
 
 
@@ -862,7 +882,7 @@ async def preview_mobile(
 ) -> Response:
     mockup = adi_manager.project_path(project_id) / "preview" / "mobile-mockup.html"
     if mockup.exists():
-        return FileResponse(mockup)
+        return FileResponse(mockup, headers=generated_content_headers())
     return HTMLResponse("<h1>Mobile mockup not generated</h1>", status_code=404)
 
 
@@ -938,8 +958,9 @@ async def workspace_run_proxy(
     headers = {
         key: value
         for key, value in request.headers.items()
-        if key.lower() not in _PROXY_HOP_HEADERS
+        if key.lower() not in _PROXY_HOP_HEADERS | {"cookie", "authorization"}
     }
+    headers["accept-encoding"] = "identity"
 
     try:
         async with httpx.AsyncClient(timeout=60.0, follow_redirects=False) as client:
@@ -959,8 +980,16 @@ async def workspace_run_proxy(
     response_headers = {
         key: value
         for key, value in upstream_resp.headers.items()
-        if key.lower() not in _PROXY_HOP_HEADERS
+        if key.lower() not in _PROXY_HOP_HEADERS | {
+            "set-cookie", "content-length", "content-encoding", "content-security-policy",
+        }
     }
+    location = response_headers.get("location")
+    if location:
+        if not location.startswith("/") or location.startswith("//"):
+            raise HTTPException(status_code=502, detail="External workspace redirect blocked")
+        response_headers["location"] = f"/run/{project_id}{location}"
+    response_headers.update(generated_content_headers(f"/run/{project_id}/"))
     return Response(
         content=upstream_resp.content,
         status_code=upstream_resp.status_code,
@@ -1546,3 +1575,60 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await websocket.send_json({"event": "echo", "data": data})
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+
+@app.get("/api/projects/{project_id}/engineering")
+async def engineering_status(project_id: str, _user: str = Depends(require_user)) -> dict:
+    project = adi_manager.get_project(project_id)
+    if not project:
+        return {"status": "error", "message": "not_found"}
+    manifest = adi_manager._read_manifest(project_id)
+    return {"status": "ok", "active_release_id": manifest.get("active_release_id"),
+            "previous_release_id": manifest.get("previous_release_id"),
+            "quality_status": manifest.get("quality_status", "not_checked"),
+            "releases": ReleaseService(adi_manager).list_releases(project_id)}
+
+
+@app.post("/api/projects/{project_id}/verify")
+async def verify_project(project_id: str, user: str = Depends(require_user)) -> dict:
+    try:
+        report = await asyncio.to_thread(ReleaseService(adi_manager).prepare, project_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)[:500]) from exc
+    _log_event(project_id, "release_verified", {"release_id": report['release_id'],
+               "passed": report['passed']}, actor=user)
+    return report
+
+
+@app.post("/api/projects/{project_id}/rollback")
+async def rollback_project(project_id: str, user: str = Depends(require_user)) -> dict:
+    result = await asyncio.to_thread(deployer_service.rollback, project_id)
+    _log_event(project_id, "release_rollback", result, actor=user)
+    return result
+
+
+class LessonRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1, max_length=4000)
+    project_id: str
+    release_id: str
+
+
+@app.get("/api/knowledge/lessons")
+async def list_lessons(_user: str = Depends(require_user)) -> list[dict]:
+    return LessonStore().list()
+
+
+@app.post("/api/knowledge/lessons")
+async def propose_lesson(body: LessonRequest, _user: str = Depends(require_user)) -> dict:
+    snapshot = ReleaseService(adi_manager).verify(body.project_id, body.release_id)
+    report = json.loads((snapshot / "verification.json").read_text())
+    lesson_id = LessonStore().propose(body.title, body.body,
+        {"project_id": body.project_id, "release_id": body.release_id,
+         "verification_passed": report['passed']})
+    return {"status": "ok", "id": lesson_id, "approval_required": True}
+
+
+@app.post("/api/knowledge/lessons/{lesson_id}/approve")
+async def approve_lesson(lesson_id: int, user: str = Depends(require_user)) -> dict:
+    return {"status": "ok" if LessonStore().approve(lesson_id, user) else "error"}

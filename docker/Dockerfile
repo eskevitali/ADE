@@ -12,12 +12,12 @@ RUN apt-get update -qq \
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml uv.lock README.md PRODUCT_VISION.md PROJECT_RULES.md ./
 COPY ade ./ade
 COPY frontend ./frontend
 COPY docker/entrypoint.sh /entrypoint.sh
 
-RUN chmod +x /entrypoint.sh && uv sync --no-dev
+RUN chmod +x /entrypoint.sh && uv sync --frozen --no-dev
 
 EXPOSE 8000
 

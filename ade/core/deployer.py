@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+import hashlib
+import json
+import time
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -13,6 +16,7 @@ from ade.core.agent_team import AgentRole, AgentTeam
 from ade.core.team_config import get_workflow_prompt
 from ade.core.adi_manager import ADIManager
 from ade.core.config import get_config
+from ade.core.engineering import ReleaseService, atomic_json, project_lock
 from ade.core.llm_provider import get_llm
 from ade.tools.compose_runner import run_compose
 from ade.tools.docker_paths import resolve_docker_bind_source
@@ -43,14 +47,14 @@ class DeployerService:
         self.docker = docker_tool or DockerTool()
 
     def _workspace_port(self, project_id: str) -> int:
-        return WORKSPACE_PORT_BASE + (hash(project_id) % 900)
+        return WORKSPACE_PORT_BASE + (int(hashlib.sha256(project_id.encode()).hexdigest()[:8], 16) % 900)
 
     _PYTHON_SERVER_MARKERS = (
         "uvicorn",
         "fastapi",
         "flask",
         "app.run(",
-        "HTTPServer",
+        "httpserver",
         "serve_forever",
         "http.server",
     )
@@ -130,13 +134,13 @@ class DeployerService:
             "port": port,
         }
 
-    def _ensure_compose(self, project_id: str, project_name: str) -> Path:
+    def _ensure_compose(self, project_id: str, project_name: str, *, snapshot: Path | None = None, image: str | None = None) -> Path:
         path = self.adi.project_path(project_id)
         compose_path = path / "docker-compose.yml"
         project = self.adi.get_project(project_id)
         network = project.network if project else ""
         port = self._workspace_port(project_id)
-        cmd, container_port, mode = self._detect_start_command(path)
+        cmd, container_port, mode = self._detect_start_command(snapshot or path)
 
         proxy_network = get_config().workspace_proxy_network
         has_http_server = mode in WORKSPACE_CONTAINER_PORTS
@@ -164,7 +168,8 @@ class DeployerService:
         service_cmd = "sleep infinity"
         workdir = "/workspace"
         host_path = resolve_docker_bind_source(path)
-        src_mount = f"{host_path / 'src'}:/workspace/src"
+        src_host = resolve_docker_bind_source((snapshot or path) / "src")
+        src_mount = f"{src_host}:/workspace/src:ro"
         data_mount = f"{host_path / 'data'}:/workspace/data"
         extra_volumes = ""
         if mode in ("mobile_preview", "simulator_preview"):
@@ -174,30 +179,34 @@ class DeployerService:
             extra_volumes = f"      - {preview_mount}\n"
             ports_block = f"""
     ports:
-      - "{port}:8080"
+      - "127.0.0.1:{port}:8080"
 """
         elif mode == "web_static":
             workdir = "/workspace/src"
             service_cmd = "python -m http.server 8080"
             ports_block = f"""
     ports:
-      - "{port}:8080"
+      - "127.0.0.1:{port}:8080"
 """
         elif mode == "python_app":
             service_cmd = "python src/main.py"
             ports_block = f"""
     ports:
-      - "{port}:8000"
+      - "127.0.0.1:{port}:8000"
 """
         elif mode == "python_script":
-            service_cmd = "sh -c 'python src/main.py; exec sleep infinity'"
+            service_cmd = "python src/main.py"
 
+        if snapshot is not None:
+            # Release applications are reachable only through ADE's authenticated proxy.
+            ports_block = ""
+        safe_name = project_name.replace("\n", " ").replace("\r", " ")
         compose_body = (
-            f"# ADI workspace — {project_name}\n"
+            f"# ADI workspace — {safe_name}\n"
             f"# mode: {mode}\n"
             f"services:\n"
             f"  workspace:\n"
-            f"    image: python:3.12-slim\n"
+            f"    image: {image or get_config().workspace_image}\n"
             f"    container_name: ade-adi-{project_id}-workspace\n"
             f"    working_dir: {workdir}\n"
             f"    volumes:\n"
@@ -205,17 +214,28 @@ class DeployerService:
             f"      - {data_mount}\n"
             f"{extra_volumes}"
             f"    command: {service_cmd}\n"
-            f"    restart: unless-stopped\n"
+            f"    restart: '{'no' if mode == 'python_script' else 'unless-stopped'}'\n"
+            f"    read_only: true\n"
+            f"    user: '65534:65534'\n"
+            f"    cap_drop: [ALL]\n"
+            f"    security_opt: [no-new-privileges:true]\n"
+            f"    pids_limit: 128\n"
+            f"    mem_limit: 512m\n"
+            f"    cpus: 1\n"
+            f"    environment: [PYTHONDONTWRITEBYTECODE=1]\n"
+            f"    tmpfs: ['/tmp:rw,noexec,nosuid,size=64m']\n"
             f"{ports_block}"
             f"{service_networks}"
         )
+        if mode == "python_script":
+            compose_body += "    network_mode: none\n"
         if networks_decl:
             compose_body += f"networks:{networks_decl}"
         compose_path.write_text(compose_body, encoding="utf-8")
 
         data = self.adi._read_manifest(project_id)
         if data:
-            data["workspace_port"] = port if has_http_server else None
+            data["workspace_port"] = port if has_http_server and snapshot is None else None
             data["workspace_mode"] = mode
             data["workspace_container_port"] = WORKSPACE_CONTAINER_PORTS.get(mode)
             self.adi._write_manifest(project_id, data)
@@ -297,6 +317,9 @@ class DeployerService:
         manifest = self.adi._read_manifest(project_id)
         workspace_port = manifest.get("workspace_port") or host_port
         project_path = self.adi.project_path(project_id)
+        active = manifest.get("active_release_id")
+        if active:
+            project_path = project_path / "releases" / active
         mode = manifest.get("workspace_mode", "idle")
         workspace_url, url_label = self._user_facing_url(
             project_id,
@@ -306,6 +329,8 @@ class DeployerService:
             running=running,
         )
 
+        if active and running and mode in WORKSPACE_CONTAINER_PORTS:
+            workspace_url, url_label = f"/run/{project_id}/", "Открыть проверенный релиз"
         logs = self._container_logs(container_name) if state != "not_created" else ""
 
         return {
@@ -325,63 +350,107 @@ class DeployerService:
             },
         }
 
+    def _wait_ready(self, project_id: str, mode: str) -> bool:
+        container = f"ade-adi-{project_id}-workspace"
+        port = WORKSPACE_CONTAINER_PORTS.get(mode)
+        for _ in range(15):
+            if port:
+                probe = (
+                    "import urllib.request; "
+                    f"r=urllib.request.urlopen('http://127.0.0.1:{port}/', timeout=2); "
+                    "assert r.status < 500"
+                )
+                command = ["docker", "exec", container, "python", "-c", probe]
+            else:
+                command = ["docker", "inspect", container, "--format",
+                           "{{.State.Status}}|{{.State.ExitCode}}"]
+            try:
+                result = subprocess.run(command, capture_output=True, text=True,
+                                        timeout=5, check=False)
+                if port and result.returncode == 0:
+                    return True
+                if not port and result.stdout.strip() == "exited|0":
+                    return True
+                if not port and result.stdout.strip().startswith("exited|"):
+                    return False
+            except (OSError, subprocess.TimeoutExpired):
+                return False
+            time.sleep(1)
+        return False
+
+    def _activate(self, project_id: str, release_id: str) -> dict[str, Any]:
+        releases = ReleaseService(self.adi)
+        snapshot = releases.verify(project_id, release_id)
+        report = json.loads((snapshot / "verification.json").read_text())
+        if not report.get("passed") or report.get("release_id") != release_id:
+            raise ValueError("Release has no passing verification")
+        identity = json.loads((snapshot / "release.json").read_text())
+        project = self.adi.get_project(project_id)
+        self._ensure_compose(project_id, project.name, snapshot=snapshot,
+                             image=identity["workspace_image"])
+        result = self._compose_up(self.adi.project_path(project_id))
+        mode = self.adi._read_manifest(project_id).get("workspace_mode", "idle")
+        if result.returncode != 0 or not self._wait_ready(project_id, mode):
+            return {"status": "error", "message": "readiness_failed",
+                    "detail": (result.stderr or result.stdout or "Readiness probe failed")[-2000:]}
+        return {"status": "ok", "mode": mode}
+
     def deploy(self, project_id: str, *, use_agent: bool = True) -> dict[str, Any]:
         project = self.adi.get_project(project_id)
         if not project:
             return {"status": "error", "message": "not_found"}
-
         if project.status == "rebuilding":
             return {"status": "error", "message": "rebuild_in_progress"}
-
-        detail = self.adi.get_project_detail(project_id)
-        spec = detail.get("spec", "") if detail else ""
-        code = "\n".join(f["content"] for f in (detail or {}).get("src_files", []))
-
-        deployer_notes = ""
-        if use_agent and spec:
-            deployer_notes = self._invoke_deployer_agent(
-                project_id, project.idea, spec, code
-            )
-            notes_path = self.adi.project_path(project_id) / "review" / "DEPLOY.md"
-            notes_path.parent.mkdir(parents=True, exist_ok=True)
-            notes_path.write_text(deployer_notes, encoding="utf-8")
-
-        if project.isolation_enabled and not project.network:
+        root = self.adi.project_path(project_id)
+        with project_lock(root):
+            report = ReleaseService(self.adi)._prepare_locked(project_id, root)
+            if not report["passed"]:
+                failures = [c['name'] + ': ' + str(c.get('detail', 'failed'))
+                            for c in report['checks'] if not c['passed']]
+                return {"status": "error", "message": "quality_gate_failed",
+                        "detail": "\n".join(failures), "verification": report}
+            release_id = report['release_id']
+            previous = self.adi._read_manifest(project_id).get('active_release_id')
             try:
-                network = self.docker.create_network(project_id)
-                data = self.adi._read_manifest(project_id)
-                data["network"] = network
-                data["isolation_enabled"] = True
-                self.adi._write_manifest(project_id, data)
+                result = self._activate(project_id, release_id)
             except Exception as exc:
-                logger.warning("Network create failed: %s", exc)
-
-        self._ensure_compose(project_id, project.name)
-        project_path = self.adi.project_path(project_id)
-        result = self._compose_up(project_path)
-
-        if result.returncode != 0:
-            stderr = result.stderr.strip() or result.stdout.strip()
+                result = {"status": "error", "message": "deploy_failed", "detail": str(exc)[:2000]}
+            if result['status'] != 'ok':
+                rollback = None
+                if previous:
+                    try:
+                        rollback = self._activate(project_id, previous)
+                    except Exception as exc:
+                        rollback = {"status": "error", "detail": str(exc)[:500]}
+                data = self.adi._read_manifest(project_id)
+                data.update(deploy_status='failed', deploy_error=result.get('detail', ''),
+                            rollback_status=rollback.get('status') if rollback else 'unavailable')
+                self.adi._write_manifest(project_id, data)
+                atomic_json(root / 'releases' / release_id / 'deployment.json',
+                            {**result, 'release_id': release_id, 'rollback': rollback})
+                return {**result, 'release_id': release_id, 'rollback': rollback}
             data = self.adi._read_manifest(project_id)
-            data["deploy_status"] = "failed"
-            data["deploy_error"] = stderr[:500]
+            data.update(active_release_id=release_id, previous_release_id=previous,
+                        deploy_status='running' if result['mode'] != 'python_script' else 'completed')
+            data.pop('deploy_error', None)
             self.adi._write_manifest(project_id, data)
-            return {
-                "status": "error",
-                "message": "deploy_failed",
-                "detail": stderr[:500],
-                "deployer_notes": deployer_notes[:500],
-            }
+            atomic_json(root / 'releases' / release_id / 'deployment.json',
+                        {'status': 'ok', 'release_id': release_id, 'previous_release_id': previous})
+            return {'status': 'ok', 'message': 'deployed', 'release_id': release_id,
+                    'verification': report, 'workspace': self.get_workspace_status(project_id)['workspace']}
 
-        ws = self.get_workspace_status(project_id)
-        data = self.adi._read_manifest(project_id)
-        data["deploy_status"] = "running"
-        data.pop("deploy_error", None)
-        self.adi._write_manifest(project_id, data)
-
-        return {
-            "status": "ok",
-            "message": "deployed",
-            "deployer_notes": deployer_notes[:1000],
-            "workspace": ws.get("workspace", {}),
-        }
+    def rollback(self, project_id: str) -> dict[str, Any]:
+        root = self.adi.project_path(project_id)
+        with project_lock(root):
+            data = self.adi._read_manifest(project_id)
+            previous = data.get('previous_release_id')
+            if not previous:
+                return {'status': 'error', 'message': 'no_previous_release'}
+            result = self._activate(project_id, previous)
+            if result['status'] == 'ok':
+                data = self.adi._read_manifest(project_id)
+                current = data.get('active_release_id')
+                data.update(active_release_id=previous, previous_release_id=current,
+                            deploy_status='running' if result['mode'] != 'python_script' else 'completed')
+                self.adi._write_manifest(project_id, data)
+            return {**result, 'release_id': previous}

@@ -26,6 +26,8 @@ ADMIN_PASSWORD=новый_уникальный_пароль_не_короче_16
 SESSION_SECRET=новый_случайный_секрет_не_короче_32_символов
 WORKSPACE_IMAGE=python:3.12-slim
 SANDBOX_TIMEOUT=60
+# Имя общей Docker-сети backend и ADI (проверьте docker inspect):
+WORKSPACE_PROXY_NETWORK=ade-v4_default
 ```
 
 Секрет можно сгенерировать: `python3 -c 'import secrets; print(secrets.token_urlsafe(48))'`.
@@ -52,7 +54,10 @@ curl -fsS http://127.0.0.1:8000/health
 Ожидаемая причина отказа после обновления старой `.env` — не заменён опубликованный
 секрет. Не присылать в чат `.env` или токены.
 
-`web_network` и существующий reverse proxy сохраняются. Для долгих проверок
+`web_network` и существующий reverse proxy сохраняются.
+`WORKSPACE_PROXY_NETWORK` должен совпадать с существующей внутренней сетью backend.
+Например, на сервере владельца это `ade_default`, а не `ade-v4_default`.
+Compose передаёт значение из `.env`; после изменения пересоздайте backend. Для долгих проверок
 reverse proxy должен допускать запрос не короче `SANDBOX_TIMEOUT + 30` секунд.
 Python HTTP-приложение должно отвечать успешно на `/` и слушать `0.0.0.0:8000`.
 Данные приложения монтируются в `/workspace/data`; контейнер работает с UID/GID 65534.

@@ -41,7 +41,7 @@ services:
       POSTGRES_URL: postgresql://ade:ade@postgres:5432/ade
       API_HOST: 0.0.0.0
       API_PORT: 8000
-      WORKSPACE_PROXY_NETWORK: ade-v4_default
+      WORKSPACE_PROXY_NETWORK: ${WORKSPACE_PROXY_NETWORK:-ade-v4_default}
     volumes:
       - ./ade:/app/ade
       - ./frontend:/app/frontend

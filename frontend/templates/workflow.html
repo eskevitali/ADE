@@ -272,16 +272,17 @@
 
   async function resolveGate(action) {
     if (!currentGate) return;
+    const resolvedGate = currentGate;
     const endpoint = action === "approve" ? "approve" : "reject";
     try {
       const res = await fetch(`/api/tasks/${taskId}/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gate: currentGate }),
+        body: JSON.stringify({ gate: resolvedGate }),
       });
       const data = await res.json();
       if (data.status === "ok") {
-        addLog(`${action === "approve" ? "Утверждено" : "Отклонено"}: ${currentGate}`,
+        addLog(`${action === "approve" ? "Утверждено" : "Отклонено"}: ${resolvedGate}`,
           action === "approve" ? "text-emerald-400" : "text-red-400");
         hideApproval();
       } else {
@@ -319,6 +320,11 @@
   if (initialGate) showApproval(initialGate);
   {% if deliverable and deliverable.type %}showDeliverable({{ deliverable | tojson }});{% endif %}
 
+  const initialStatus = {{ status | tojson }};
+  if (initialStatus === "running") updateWorkflowProgress({{ phase | tojson }});
+  else if (initialStatus === "failed") workflowProgress.fail("Ошибка выполнения");
+  else if (initialStatus === "completed") workflowProgress.complete("Workflow завершён");
+
   ws.onopen = () => { addLog("WebSocket connected", "text-emerald-400"); ws.send(JSON.stringify({ subscribe: taskId })); };
   ws.onmessage = (e) => {
     const data = JSON.parse(e.data);
@@ -340,6 +346,7 @@
       case "awaiting_approval":
         showApproval(data.gate); addLog(`Awaiting: ${data.gate}`, "text-purple-300"); break;
       case "approval_resolved":
+        updateWorkflowProgress(data.gate);
         hideApproval(); statusEl.textContent = "running"; statusEl.className = "text-2xl font-bold text-amber-300"; break;
       case "deliverable_ready":
         showDeliverable(data); addLog("Deliverable ready", "text-emerald-400");
@@ -356,6 +363,7 @@
         hideApproval();
         document.getElementById("workflow-error").textContent = data.error || "Ошибка выполнения";
         document.getElementById("workflow-error").classList.remove("hidden");
+        workflowProgress.fail("Ошибка выполнения");
         addLog(`Error: ${data.error}`, "text-red-400"); statusEl.textContent = "failed"; statusEl.className = "text-2xl font-bold text-red-400"; break;
       case "task_completed":
         if (data.deliverable) showDeliverable(data.deliverable);

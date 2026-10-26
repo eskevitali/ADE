@@ -852,17 +852,14 @@ async def workflow_view(
 
 
 def _gate_document(record: TaskRecord, gate: str) -> str:
-    if gate == "tz":
-        if record.tz:
-            return record.tz
-        if record.project_id:
-            path = adi_manager.project_path(record.project_id) / "spec" / "TZ.md"
-            if path.exists():
-                return path.read_text(encoding="utf-8")
+    if gate not in ("tz", "spec"):
         return ""
-    if gate == "spec":
-        return record.spec
-    return ""
+    if record.project_id:
+        filename = "TZ.md" if gate == "tz" else "SPEC.md"
+        path = adi_manager.project_path(record.project_id) / "spec" / filename
+        if path.is_file():
+            return path.read_text(encoding="utf-8")
+    return record.tz if gate == "tz" else record.spec
 
 
 def generated_content_headers(prefix: str | None = None) -> dict[str, str]:

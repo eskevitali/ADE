@@ -114,7 +114,7 @@ class BootstrapCycleOrchestrator(DevCycleOrchestrator):
         self.adi.write_tz(self.project_id, tz)
         self.on_event(
             "document_ready",
-            {"gate": "tz", "document": tz[:4000], "task_id": self.task_id},
+            {"gate": "tz", "document": tz, "task_id": self.task_id},
         )
         self.on_event("step_completed", {"node": "architect", "phase": "tz", "status": "tz_ready"})
 
@@ -132,7 +132,7 @@ class BootstrapCycleOrchestrator(DevCycleOrchestrator):
         self.adi.write_spec(self.project_id, spec)
         self.on_event(
             "document_ready",
-            {"gate": "spec", "document": spec[:4000], "task_id": self.task_id},
+            {"gate": "spec", "document": spec, "task_id": self.task_id},
         )
         self.on_event("step_completed", {"node": "architect", "phase": "spec", "status": "spec_ready"})
 

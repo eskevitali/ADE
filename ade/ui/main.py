@@ -25,6 +25,7 @@ from ade import __version__
 from ade.core.adi_manager import ADIManager
 from ade.core.design_assets import MAX_FILE, MAX_TOTAL, STYLES, save_design, validate_asset
 from ade.core.model_catalog import catalogue
+from ade.core.preview_assets import embed_brand_assets
 from ade.core.agent_team import DEFAULT_MODELS, AgentConfig, AgentRole
 from ade.core.team_config import SUGGESTED_MODELS, get_team_manager, load_agent_team
 from ade.core.approval_gate import approval_gate
@@ -937,6 +938,10 @@ def _preview_source(project_id: str, asset_path: str) -> Response:
         f"connect-src {origin}{prefix}; form-action {origin}{prefix};",
         "connect-src 'none'; form-action 'none';",
     )
+    if path.suffix.lower() == '.html':
+        headers['Content-Security-Policy'] = headers['Content-Security-Policy'].replace(
+            "style-src 'unsafe-inline'", "style-src 'unsafe-inline' data:")
+        return HTMLResponse(embed_brand_assets(path.read_text(encoding='utf-8'), src), headers=headers)
     return FileResponse(path, headers=headers)
 
 

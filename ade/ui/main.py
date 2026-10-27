@@ -880,14 +880,17 @@ def generated_content_headers(prefix: str | None = None) -> dict[str, str]:
 
 
 @app.get("/preview/{project_id}")
+@app.get("/preview/{project_id}/")
 async def preview_web(
-    project_id: str, user: str = Depends(require_user)
+    project_id: str, request: Request, user: str = Depends(require_user)
 ) -> Response:
     src = adi_manager.project_path(project_id) / "src"
     for name in ("index.html", "app.html", "main.html"):
         path = src / name
         if path.exists():
-            return FileResponse(path, headers=generated_content_headers())
+            if not request.url.path.endswith("/"):
+                return RedirectResponse(url=f"/preview/{project_id}/", status_code=307)
+            return _preview_source(project_id, name)
     sim = adi_manager.project_path(project_id) / "preview" / "timer-simulator.html"
     if sim.exists():
         return RedirectResponse(url=f"/preview/{project_id}/simulator", status_code=303)
@@ -915,6 +918,31 @@ async def preview_mobile(
     if mockup.exists():
         return FileResponse(mockup, headers=generated_content_headers())
     return HTMLResponse("<h1>Mobile mockup not generated</h1>", status_code=404)
+
+
+def _preview_source(project_id: str, asset_path: str) -> Response:
+    src = adi_manager.project_path(project_id) / "src"
+    relative = Path(asset_path)
+    if relative.is_absolute() or any(part in ("..", ".") for part in relative.parts):
+        raise HTTPException(status_code=404)
+    path = src / relative
+    if src.is_symlink() or any(p.is_symlink() for p in (path, *path.parents) if p != src.parent):
+        raise HTTPException(status_code=404)
+    if not path.resolve().is_relative_to(src.resolve()) or not path.is_file():
+        raise HTTPException(status_code=404)
+    prefix = f"/preview/{project_id}/"
+    headers = generated_content_headers(prefix)
+    origin = f"https://{get_config().domain}"
+    headers["Content-Security-Policy"] = headers["Content-Security-Policy"].replace(
+        f"connect-src {origin}{prefix}; form-action {origin}{prefix};",
+        "connect-src 'none'; form-action 'none';",
+    )
+    return FileResponse(path, headers=headers)
+
+
+@app.get("/preview/{project_id}/{asset_path:path}")
+async def preview_asset(project_id: str, asset_path: str, user: str = Depends(require_user)) -> Response:
+    return _preview_source(project_id, asset_path)
 
 
 @app.get("/api/projects/{project_id}/expo-download")

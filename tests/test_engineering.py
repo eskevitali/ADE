@@ -201,6 +201,22 @@ def test_api_verification_ui_and_untrusted_content(workspace, monkeypatch):
     assert 'sandbox allow-scripts' in csp
     assert 'allow-same-origin' not in csp
     assert "connect-src 'none'" in csp
+    assert preview.url.path.endswith('/')
+    root = workspace.project_path('product-1')
+    assets = root / 'src' / 'assets'
+    assets.mkdir()
+    (assets / 'brand.css').write_text('body { color: red; }')
+    asset = client.get('/preview/product-1/assets/brand.css')
+    assert asset.status_code == 200
+    assert asset.text == 'body { color: red; }'
+    assert 'text/css' in asset.headers['content-type']
+    assert '/preview/product-1/' in csp
+    (assets / 'secret.css').symlink_to(root / 'spec' / 'SPEC.md')
+    assert client.get('/preview/product-1/assets/secret.css').status_code == 404
+    assert client.get('/preview/product-1/%2e%2e/spec/SPEC.md').status_code == 404
+    anonymous = TestClient(ui.app).get('/preview/product-1/assets/brand.css', follow_redirects=False)
+    assert anonymous.status_code == 303
+    assert anonymous.headers['location'].startswith('/login?')
 
 
 def test_proxy_does_not_expose_owner_session_or_accept_app_cookies(workspace, monkeypatch):
